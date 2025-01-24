@@ -17,7 +17,7 @@ Current Limitations:
 - Zones 3 & 4 (Values are likely next in order from existing zone data)
 - Untested support of systems that do not have the original IOT Module already configured with their MagiqTouch panel. (Response to module discovery process)
 - Zone 1 Temp sensor is not always accurate, updates stop when system is off (Additional zones do not have this limitation).
-
+- Has only been tested with controller version R719
 
 Hardware List:
 - FireBeetle ESP32 (DFRobot) - Any ESP32 that has 2x additional UART ports for the RS458 modules should work.
@@ -55,18 +55,23 @@ ArduinoControlLAN-AirconMonitor code can also be used as a monitor of the modbus
 
 
 Connector Info:
-The cables from the control panel and control board usea 6P6C male connector.
+The cables from the control panel and control board use a 6P6C male connector.
 To avoid cutting the original cables, a standard 8P8C / RJ45 female jack can be used to connect to the individual wires.
 
 The connector that goes to the control board only needs A,B and a single ground.
 The connector to the wall control panel requires both GND and 5V connected as this powers the panel.
+
 I have used a female DC barell cable to re-use the original 5V Power supply from the IOT/WiFi Module.
+This 5v power is connected to the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.
 
 The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.
-5V -> Solid Green and Solid Orange.
-GND -> Brown/White and Blue/White.
-RS485 A -> Orange/White.
-RS485 B -> Solid Blue.
+
+| RS485 Module | RJ45 Wire (A Wiring) |
+|--------------|-----------|
+| 5V (Control Panel Port Only) | Solid Green and Solid Orange |
+| GND | Brown/White and Blue/White. |
+| RS485 A | Orange/White |
+| RS485 B | Solid Blue |
 
 ![RJ45](Images/rj45.PNG)
 
@@ -98,7 +103,7 @@ The GND and VCC are linked, purpose is likely to reduce cable resistance.
 Tested VCC to Ground Voltage: 5.4V 
 
 
-Access and Control:
+## API Access and Control:
 
 A GET Request to the module will return status info in JSON format.
 Example of returned output.
@@ -140,7 +145,7 @@ List of available commands, where x is the value.
 
 
 
-MODBUS Information:
+## MODBUS:
 The Modbus Codes.xlsx file contains information about the modbus messages used on the network.
 Messages are sent in pairs with a request and response message.
 The document formats these by the Slave ID, Function Code, Request, Response with notes about the information found in these message pairs.
