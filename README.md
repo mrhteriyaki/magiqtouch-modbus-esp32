@@ -70,10 +70,14 @@ RS485 B -> Solid Blue.
 
 ![RJ45](Images/rj45.PNG)
 
-A messy arrangement of the devices ready to connect:
+The devices wired up inside 3d printed housing:
 
-![RJ45](Images/devices-messy.jpg)
+![RJ45](Images/inside_box.jpg)
 
+
+Mounted inside the return air wallspace:
+
+![RJ45](Images/mounted.jpg)
 
 
 Here's the pin layout for the original Connector too.
