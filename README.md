@@ -70,7 +70,7 @@ RS485 B -> Solid Blue.
 
 ![RJ45](Images/rj45.PNG)
 
-The devices wired up inside 3d printed housing:
+The devices wired up inside 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.
 
 ![RJ45](Images/inside_box.jpg)
 
