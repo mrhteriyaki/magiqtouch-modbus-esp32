@@ -25,6 +25,7 @@ Hardware List:
 - 2x RJ45 Connectors (Regular network jack)
 - 2EDGRK Connectors (Optional)
 - Ethernet Cable Wire (Solid Core)
+- Groove to Female Pin cables (SS110990028 / Seeed Grove - 4 pin Female Jumper to Grove 4 pin Conversion Cable) 
 
 Tools: 
 - Krone Tool
@@ -36,16 +37,16 @@ Connection list for the RS485 Modules to the ESP Module.
 |-----------------|----------------|
 |D0/IO16|Module 1 - TX|
 |LRCK/IO17|Module 1 - RX|
-|IO9/D5|Module 2 - TX|
-|IO19/D6|Module 2 - RX|
+|IO26/D3|Module 2 - TX|
+|IO27/D4|Module 2 - RX|
 
 
 Basic steps of this project:
 - Purchase the required hardware.
 - Download and Install Arduino IDE (Free).
-- Update the INO code file under ArduinoControlLAN-AirconControl with your SSID/Passkey to connect to the WiFi network.
+- Update the WiFiSettings.h file under ArduinoControlLAN-AirconControl with your SSID/Passkey to connect to the WiFi network.
 - Under Tools, Board manager install the package for your ESP32 device. FireBeetle works with "esp32 by Espressif Systems" - Version 2.0.17 Tested. v3 has serial issues with the Gen1 Firebeetle.
-- Upload ArduinoControlLAN-AirconControl code to the ESP32 with the Arduino IDE.
+- Open the ArduinoControlLAN-AirconControl.INO file under ArduinoControlLAN-AirconControl and upload it to your ESP32 with the Arduino IDE.
 - Check the serial output for the IP Address which will be printed at startup after WiFi connects, recommend reserving the address on your DHCP server.
 - Connect RS485 Modules to the ESP32 as per above pinout list above.
 - Disconnect the existing original WiFi IOT Module.
@@ -76,6 +77,7 @@ The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours 
 ![RJ45](Images/rj45.PNG)
 
 The devices wired up inside 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.
+(Image reflects older wiring with 9/10 pins, has been moved to use alternate pins since photo was taken.)
 
 ![RJ45](Images/inside_box.jpg)
 

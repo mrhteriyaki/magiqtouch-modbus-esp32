@@ -1,22 +1,24 @@
 //Firebeetle ESP32 Aircon Interface
 //Board Library esp32 by Espressif Systems in use.
-//Update to major version 3 breaks serial2.
-//2.0.17 tested working without serial issue.
 
+//Espressif Board Library 3.x is not stable.
+//Ensure board library used is 2.0.17
+
+//Testing with v3 issues.
+//Default serial IO9/10 dont work, alternate serial pins resolved serial relay issue.
+//Web Stops responding after bootup - not tested.
 
 //Libraries.
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include "WiFiSettings.h"
 
 //Max message size for modbus, reduce due to ram usage.
 #define MAXMSGSIZE 512
 #define MAXSLAVEID 30
 #define GAPTHRESHOLD 50
-
-const char* ssid = "WiFiNetworkName";      // Change this to your WiFi SSID
-const char* password = "WirelessPasskey123";  // Change this to your WiFi password
 
 WebServer server(80);
 
@@ -84,6 +86,25 @@ uint8_t x14v = 0x00;  //zone control.
 uint8_t x17v = 0x14;  //Zone 2 Temp - Default 20C
 uint8_t x18v = 0x14;  //Zone 1 Temp
 
+
+
+//Request for IOT Module info - Sends MAC address.
+uint8_t IOTModuleInfoRequest[] = { 0xEB, 0x03, 0x03, 0xE4, 0x00, 0x05, 0xD3, 0x70 };
+uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B, 0xA8, 0x11 };  //15 bytes length
+
+
+//Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
+uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  //CRC included.
+uint8_t eb1005fb0021[] = { 0xEB, 0x10, 0x05, 0xFB, 0x00, 0x21, 0x67, 0xE6 };
+uint8_t eb10061c002c[] = { 0xEB, 0x10, 0x06, 0x1C, 0x00, 0x2C, 0x16, 0x50 };
+uint8_t eb1006480004[] = { 0xEB, 0x10, 0x06, 0x48, 0x00, 0x04, 0x57, 0x9E };
+uint8_t eb10064C0038[] = { 0xEB, 0x10, 0x06, 0x4C, 0x00, 0x38, 0x16, 0x4E };
+uint8_t eb100684002a[] = { 0xEB, 0x10, 0x06, 0x84, 0x00, 0x2A, 0x17, 0xBD };
+uint8_t eb1006ae002a[] = { 0xEB, 0x10, 0x06, 0xAE, 0x00, 0x2A, 0x36, 0x75 };
+uint8_t eb1006d80019[] = { 0xEB, 0x10, 0x06, 0xD8, 0x00, 0x19, 0x97, 0xBA };
+uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  //Info from CP1 to IOT for On/Off State.
+uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  //Main info update from CP1 to IOT module.
+uint8_t eb1008e60032_request[109];
 
 
 
@@ -166,16 +187,22 @@ void unlockVariable() {
 
 
 
+
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
-  //Controller.Setup();
-
-  Serial1.begin(9600);  //Pins 16/17
-  Serial2.begin(9600);  //Pins 9/10
+  //Set Serial, Baud Rate, 8 bit no parity, RX,TX 
+  Serial1.begin(9600, SERIAL_8N1, 26, 27);  
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);  
 
 
   msgSemaphore = xSemaphoreCreateMutex();
+
+
+  //Prefill messages used for webserver.
+  memset(eb1008e60032_request, 0, 109);
+
+
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -199,9 +226,7 @@ void setup() {
 }
 
 void loop() {
-
-  runWebServer();
-  delay(2);
+  server.handleClient();
 }
 
 
@@ -261,6 +286,21 @@ void webRootResponse() {
   hvacJson["zone1_temp_sensor"] = Zone1TempInfo;
   hvacJson["zone2_temp_sensor"] = Zone2TempInfo;
   hvacJson["panel_command_count"] = CommandInfo;
+
+
+
+  char eb1008char[109 * 4];
+  eb1008char[0] = '\0';  // Initialize the string as empty
+  for (size_t i = 0; i < 109; i++) {
+    char buffer[4];
+    sprintf(buffer, "%u", eb1008e60032_request[i]);
+    strcat(eb1008char, buffer);
+    if (i < 109 - 1) {
+      strcat(eb1008char, ",");
+    }
+  }
+  hvacJson["eb1008e60032_request"] = eb1008char;
+
 
   unlockVariable();
 
@@ -323,7 +363,7 @@ void webCommandResponse() {
       }
       Serial.println("Target Temp set to " + String(TargetTemp2));
     }
-    sendCommand = true; //Force command update
+    sendCommand = true;  //Force command update
     unlockVariable();
 
 
@@ -333,9 +373,6 @@ void webCommandResponse() {
   }
 }
 
-void runWebServer() {
-  server.handleClient();
-}
 
 
 
@@ -359,8 +396,6 @@ bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
     Panel1Info(msgBuffer, msgLength);
     Panel2Info(msgBuffer, msgLength);
 
-    //lockVariable();
-    //unlockVariable();
     return true;
   }
   return false;
@@ -398,13 +433,7 @@ void Panel2Info(uint8_t* msgBuffer, int msgLength) {
     Zone2TempInfo = msgBuffer[3];
     unlockVariable();
   }
-
-  //Need to find on/off
 }
-
-
-
-
 
 void SerialPrintMessage(uint8_t* msgBuffer, int msgLength, int SerialID) {
   Serial.print("S");
@@ -568,22 +597,7 @@ void SetXVal(uint8_t* val, uint8_t newVal) {
 }
 
 
-//Request for IOT Module info - Sends MAC address.
-uint8_t IOTModuleInfoRequest[] = { 0xEB, 0x03, 0x03, 0xE4, 0x00, 0x05, 0xD3, 0x70 };
-uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B, 0xA8, 0x11 };  //15 bytes length
 
-
-//Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
-uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  //CRC included.
-uint8_t eb1005fb0021[] = { 0xEB, 0x10, 0x05, 0xFB, 0x00, 0x21, 0x67, 0xE6 };
-uint8_t eb10061c002c[] = { 0xEB, 0x10, 0x06, 0x1C, 0x00, 0x2C, 0x16, 0x50 };
-uint8_t eb1006480004[] = { 0xEB, 0x10, 0x06, 0x48, 0x00, 0x04, 0x57, 0x9E };
-uint8_t eb10064C0038[] = { 0xEB, 0x10, 0x06, 0x4C, 0x00, 0x38, 0x16, 0x4E };
-uint8_t eb100684002a[] = { 0xEB, 0x10, 0x06, 0x84, 0x00, 0x2A, 0x17, 0xBD };
-uint8_t eb1006ae002a[] = { 0xEB, 0x10, 0x06, 0xAE, 0x00, 0x2A, 0x36, 0x75 };
-uint8_t eb1006d80019[] = { 0xEB, 0x10, 0x06, 0xD8, 0x00, 0x19, 0x97, 0xBA };
-uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };
-uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };
 
 void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
   if (msgLength < 8)  //Skip messages below required size for these functions..
@@ -668,6 +682,10 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
 
     lockVariable();  //Lock state, variables used by webserver request.
 
+    if (msgLength == 109) {
+      memcpy(eb1008e60032_request, msgBuffer, 109);
+    }
+
     // (msgBuffer[13] >> 4); //Other nibble of Evap Unit info, unsure of usage.
     EvapModeInfo = msgBuffer[12];
     EvapFanSpeedInfo = (msgBuffer[14] & 0x0F);  //mask higher nibble.
@@ -679,6 +697,7 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     Zone1EnabledInfo = msgBuffer[80];  //Zone 1 Enabled
     Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
+
     unlockVariable();
     //Zone2 captured from CP2 reports.
     return;

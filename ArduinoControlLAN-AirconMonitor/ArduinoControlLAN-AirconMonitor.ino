@@ -1,29 +1,12 @@
-//Firebeetle ESP32 Aircon Interface
-
-//Web Server with functions:
-//Digital Pin Control Output - D2/D3.
-//PWM - Not ready.
-//Serial Relay
-
-//Board Library esp32 by Espressif Systems in use.
-//Update to major version 3 breaks serial2.
-//2.0.17 tested working without serial issue.
+//Firebeetle ESP32 Aircon Interface - Monitoring Only
 
 
-//Libraries.
-#include <WiFi.h>
-#include <WiFiClient.h>
-#include <WebServer.h>
 
 //Max message size for modbus, reduce due to ram usage.
 #define MAXMSGSIZE 512
 #define MAXSLAVEID 30
 #define GAPTHRESHOLD 50
 
-const char* ssid = "WiFiNetworkName";      // Change this to your WiFi SSID
-const char* password = "WirelessPasskey123";  // Change this to your WiFi password
-
-WebServer server(80);
 
 SemaphoreHandle_t msgSemaphore;
 
@@ -34,30 +17,6 @@ int serial1Index = 0;
 unsigned long s2previousMillis = 0;
 unsigned char serial2buffer[MAXMSGSIZE];
 int serial2Index = 0;
-
-
-class ResponseData {
-public:
-
-  unsigned char rList[MAXSLAVEID][MAXMSGSIZE];
-  unsigned int rLength[MAXSLAVEID];
-  unsigned char sIndex[MAXSLAVEID];
-  int UsedSlaveId = -1;
-
-  ResponseData() {
-    for (int i = 0; i < MAXSLAVEID; i++) {
-      rLength[i] = 0;
-      sIndex[i] = 0;
-    }
-  }
-};
-
-
-ResponseData S1_3;
-ResponseData S1_16;
-ResponseData S2_3;
-ResponseData S2_16;
-
 
 
 
@@ -129,54 +88,12 @@ static const uint8_t table_crc_lo[] = {
 };
 
 
-void lockVariable() {
-  xSemaphoreTake(msgSemaphore, portMAX_DELAY);
-}
-
-void unlockVariable() {
-  xSemaphoreGive(msgSemaphore);
-}
-
-
-
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
-  //Controller.Setup();
 
-  Serial1.begin(9600);  //Pins 16/17
-  Serial2.begin(9600);  //Pins 9/10
-
-
-  msgSemaphore = xSemaphoreCreateMutex();
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
-
-  //Start the web server
-  server.on("/", HTTP_GET, webRootResponse);
-  server.begin();
-
-
-
-  //scheduler.addTask(webServerTask);
-  //webServerTask.enable();
-
-  //scheduler.addTask(serialTask);
-  //serialTask.enable();
-
-  //scheduler.addTask(serialTask2);
-  //serialTask2.enable();
-
+  Serial1.begin(9600);  
+  Serial2.begin(9600); 
 
   // Set up a second core for the serial loop
   xTaskCreatePinnedToCore(
@@ -191,9 +108,7 @@ void setup() {
 }
 
 void loop() {
-
-  runWebServer();
-  delay(2);
+  delay(1);
 }
 
 unsigned long GAPTEST = 5000;
@@ -259,51 +174,6 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, unsi
   }
 }
 
-String AddInfoString(ResponseData* RDATA, int SerialID, int FunctionID) {
-  String pageContent = "<br>Serial " + String(SerialID) + "<br>";
-  pageContent += "Function " + String(FunctionID) + " Responses:<br>";
-  for (int i = 0; i <= RDATA->UsedSlaveId; i++) {
-    char hexString[3];
-    sprintf(hexString, "%02X", RDATA->sIndex[i]);
-    pageContent += String(hexString);
-    for (int index = 0; index < RDATA->rLength[i]; index++) {
-      sprintf(hexString, "%02X", RDATA->rList[i][index]);
-      pageContent += "," + String(hexString);
-    }
-    pageContent += "<br>";
-  }
-  return pageContent;
-}
-
-
-void webRootResponse() {
-  lockVariable();
-  String pageContent = "<html>";
-
-
-
-  pageContent += AddInfoString(&S1_3, 1, 3);
-  pageContent += AddInfoString(&S1_16, 1, 16);
-  pageContent += AddInfoString(&S2_3, 2, 3);
-  pageContent += AddInfoString(&S2_16, 2, 16);
-
-
-  unlockVariable();
-
-  pageContent += "</html>";
-
-  //Serial.println("Sending web data");
-  //Serial.println(pageContent);
-
-  server.sendHeader("Content-Type", "text/html");
-  server.send(200, "text/html", pageContent);
-}
-
-void runWebServer() {
-  server.handleClient();
-}
-
-
 
 bool ProcessMessage(unsigned char msgBuffer[], int msgLength, int SerialID) {
   if (msgLength < 4) {  //Min message length.
@@ -328,86 +198,11 @@ bool ProcessMessage(unsigned char msgBuffer[], int msgLength, int SerialID) {
     Serial.print(msgBuffer[msgLength - 1], HEX);
     Serial.println();
 
-
-
-    //Check if message is a request to IOT Module and send response.
-    //if (msgBuffer[0] == 0xEB && msgBuffer[1] == 0x03 && msgBuffer[2] == 0x1A) {
-    //}
-
-
-
-    //return true, below code for webserver disabled.
-    return true;
-
-    //Copy data to responseList, exclude Slave ID and CRC.
-
-    lockVariable();
-    //SlaveID = msgBuffer[0]
-    //Function = msgBuffer[1]
-    if (msgLength > MAXMSGSIZE) {
-      Serial.println("Alert - Message exceeding max message size limit has been ignored.");
-    } else {
-
-      if (SerialID == 1) {
-        if (msgBuffer[1] == 3)  //Function 3
-        {
-          SaveMessage(&S1_3, msgBuffer, msgLength);
-        } else if (msgBuffer[1] == 16)  //Function 16
-        {
-          SaveMessage(&S1_16, msgBuffer, msgLength);
-        }
-      } else if (SerialID == 2) {
-
-        if (msgBuffer[1] == 3)  //Function 3
-        {
-          SaveMessage(&S2_3, msgBuffer, msgLength);
-        } else if (msgBuffer[1] == 16)  //Function 16
-        {
-          SaveMessage(&S2_16, msgBuffer, msgLength);
-        }
-      }
-    }
-    unlockVariable();
     return true;
   }
   return false;
 }
 
-void SaveMessage(ResponseData* RPD, unsigned char* mBuf, int mLen) {
-  unsigned char slaveId = mBuf[0];
-  int slaveIndex = -1;
-  for (int i = 0; i <= RPD->UsedSlaveId; i++) {
-    if (RPD->sIndex[i] == slaveId)  //Find Slave ID in list.
-    {
-      slaveIndex = i;
-      break;
-    }
-  }
-
-  if (slaveIndex == -1) {
-    if (RPD->UsedSlaveId == MAXSLAVEID) {
-      Serial.println("Max Slave ID reached - increase MAXSLAVEID");
-      return;
-    }
-    //Allocate SlaveIDIndex element to slave id.
-    slaveIndex = ++RPD->UsedSlaveId;
-    RPD->sIndex[slaveIndex] = slaveId;
-
-    /*
-    Serial.print("Serial index ");
-    Serial.print(slaveIndex);
-    Serial.print(" ");
-    Serial.print(ident);
-    Serial.print(" new slave id: ");
-    Serial.println(slaveId);
-    */
-  }
-
-  for (int i = 0; i < (mLen - 3); i++) {
-    RPD->rList[slaveIndex][i] = mBuf[(i + 1)];
-  }
-  RPD->rLength[slaveIndex] = (mLen - 3);  //-2 for CRC, -1 for ID.
-}
 
 static uint16_t modbusCRC(uint8_t* buffer, uint16_t buffer_length) {
   uint8_t crc_hi = 0xFF; /* high CRC byte initialized */
