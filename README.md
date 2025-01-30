@@ -16,7 +16,8 @@ Current Limitations:
 - Refrigerated Cooling
 - Zones 3 & 4 (Values are likely next in order from existing zone data)
 - Untested support of systems that do not have the original IOT Module already configured with their MagiqTouch panel. (Response to module discovery process)
-- Zone 1 Temp sensor is not always accurate, updates stop when system is off (Additional zones do not have this limitation).
+- Zone 1 temp sensor is not always updated, update only occurs when using a Cooler/Heater on temperature mode. Additional zones are reported accurately using their update message to primary control panel.
+  (Temp reporting issue seems to occur in official module too, incorrectly reports temperature on app when using Fan mode).
 - Has only been tested with controller version R719
 
 Hardware List:
