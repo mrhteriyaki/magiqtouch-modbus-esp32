@@ -15,10 +15,10 @@ Working with configuration:
 Current Limitations:
 - Refrigerated Cooling
 - Zones 3 & 4 (Values are likely next in order from existing zone data)
-- Untested support of systems that do not have the original IOT Module already configured with their MagiqTouch panel. (Response to module discovery process)
 - Zone 1 temp sensor is not always updated, update only occurs when using a Cooler/Heater on temperature mode. Additional zones are reported accurately using their update message to primary control panel.
   (Temp reporting issue seems to occur in official module too, incorrectly reports temperature on app when using Fan mode).
-- Has only been tested with controller version R719
+- Has only been tested with controller version R719.
+- WiFi controller status does not reflect ESP WiFi state.
 
 Hardware List:
 - FireBeetle ESP32 (DFRobot) - Any ESP32 that has 2x additional UART ports for the RS458 modules should work.
@@ -55,7 +55,6 @@ Basic steps of this project:
 
 ArduinoControlLAN-AirconMonitor code can also be used as a monitor of the modbus. (Useful for testing new configurations).
 
-
 Connector Info:
 The cables from the control panel and control board use a 6P6C male connector.
 To avoid cutting the original cables, a standard 8P8C / RJ45 female jack can be used to connect to the individual wires.
@@ -80,17 +79,17 @@ The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours 
 The devices wired up inside 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.
 (Image reflects older wiring with 9/10 pins, has been moved to use alternate pins since photo was taken.)
 
-![RJ45](Images/inside_box.jpg)
+![insidebox](Images/inside_box.jpg)
 
 
 Mounted inside the return air wallspace:
 
-![RJ45](Images/mounted.jpg)
+![mounted](Images/mounted.jpg)
 
 
 Here's the pin layout for the original Connector too.
 
-![Connector](Images/Pinout.png)
+![Pinout](Images/Pinout.png)
 
 The GND and VCC are linked, purpose is likely to reduce cable resistance.
 
@@ -165,8 +164,44 @@ Known Slave IDs:
 |0x8D (141)| Heater Unit|
 |0x97 (151)| Control Panel 2|
 |0xA5 (165)| Unknown|
-|0xD4 (212)| Zone Controller by elimination – may also be shared heater|
+|0xD4 (212)| Zone Controller by elimination ï¿½ may also be shared heater|
 |0xEB (235)| IOT WiFi Module|
 |0xF4 (244)| Unknown|
 |0xFA (250)| Unknown|
 |0xFE (254)| Unknown|
+
+
+
+## New Module Setup.
+These steps are to configure the system with the WiFi IOT module.
+If you use the official WiFi module already these steps are not required as it should already be part of your system from the original module setup.
+
+1. Go to Settings -> General -> System Configuration (Bottom of the list)
+If you are prompted for a code, try **7378** (this is the code printed in my manual, if it doesnt work check your manual as it has the service code).
+
+![syscfg1](Images/setup/syscfg1.jpg)
+
+2. Display or Modify existing System.
+   
+![syscfg2](Images/setup/syscfg2.jpg)
+
+3. Tap accept to start the system modbus scan.
+
+![syscfg3](Images/setup/syscfg3.jpg)
+
+4. It will scan for a couple minutes.
+
+![syscfg4](Images/setup/syscfg4.jpg)
+
+5. When complete should display a summary of components on the system.
+
+![syscfg5](Images/setup/syscfg5.jpg)
+
+6. The module should be detected as WiFi Smart Control, tap accept to complete the setup and the controller will restart.
+
+![syscfg6](Images/setup/syscfg6.jpg)
+
+7. Once the device startup is complete, it should be ready to go.
+Note the WiFi status does not reflect the actual WiFi signal and uses a static code to fake the report.
+
+
