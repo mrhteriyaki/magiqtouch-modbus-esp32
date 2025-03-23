@@ -67,7 +67,7 @@ uint8_t Zone2TempInfo = 0x0;
 uint8_t TargetTempInfo = 0x0;
 uint8_t TargetTemp2Info = 0x0;
 uint8_t ThermisterTempInfo = 0x0;
-
+uint8_t AutomaticCleanRunning = 0x0;
 
 bool sendCommand = false;
 uint8_t IOTModuleCommandRequest[] = { 0xEB, 0x03, 0x0B, 0x0C, 0x00, 0x0D, 0x50, 0xE2 };
@@ -206,8 +206,8 @@ void setup() {
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    delay(1000);
+    Serial.println("Waiting for WiFi to Connect");
   }
 
   Serial.println("");
@@ -286,9 +286,10 @@ void webRootResponse() {
   hvacJson["zone1_temp_sensor"] = Zone1TempInfo;
   hvacJson["zone2_temp_sensor"] = Zone2TempInfo;
   hvacJson["panel_command_count"] = CommandInfo;
+  hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
 
 
-
+  /*
   char eb1008char[109 * 4];
   eb1008char[0] = '\0';  // Initialize the string as empty
   for (size_t i = 0; i < 109; i++) {
@@ -300,14 +301,13 @@ void webRootResponse() {
     }
   }
   hvacJson["eb1008e60032_request"] = eb1008char;
-
+  */
 
   unlockVariable();
 
   String jsonstring;
   serializeJsonPretty(hvacJson, jsonstring);
-  server.sendHeader("Content-Type", "text/html");
-  server.send(200, "text/html", jsonstring);
+  server.send(200, "application/json", jsonstring);
 }
 
 
@@ -370,6 +370,7 @@ void webCommandResponse() {
     server.send(200, "text/plain", "OK");
   } else {
     server.send(400, "text/plain", "No body received.");
+    Serial.println("Failed to send reply to command - no body received.");
   }
 }
 
@@ -687,6 +688,7 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     }
 
     // (msgBuffer[13] >> 4); //Other nibble of Evap Unit info, unsure of usage.
+    AutomaticCleanRunning = msgBuffer[11];
     EvapModeInfo = msgBuffer[12];
     EvapFanSpeedInfo = (msgBuffer[14] & 0x0F);  //mask higher nibble.
     HeaterModeInfo = msgBuffer[40];
