@@ -36,7 +36,7 @@ Tools:
 Connection list for the RS485 Modules to the ESP Module.
 |ESP32 PIN|RS485 Module|
 |-----------------|----------------|
-|D0/IO16|Module 1 - TX|
+|D1/IO16|Module 1 - TX|
 |LRCK/IO17|Module 1 - RX|
 |IO26/D3|Module 2 - TX|
 |IO27/D4|Module 2 - RX|
