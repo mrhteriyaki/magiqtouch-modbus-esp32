@@ -6,6 +6,10 @@ The device will proxy modbus messages inbetween the primary control panel and ot
 A web server is run on the ESP module for access and control.
 Designed to be used as a basic API for other automation systems to control.
 
+## Related Home Assistant Integration:
+https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
+
+
 Working with configuration:
 - Evaporative Cooler
 - Gas Heater 
@@ -81,7 +85,6 @@ The devices wired up inside 3d printed housing, STL files for 3d printing availa
 
 ![insidebox](Images/inside_box.jpg)
 
-
 Mounted inside the return air wallspace:
 
 ![mounted](Images/mounted.jpg)
@@ -105,7 +108,7 @@ The GND and VCC are linked, purpose is likely to reduce cable resistance.
 Tested VCC to Ground Voltage: 5.4V 
 
 
-## API Access and Control:
+## Web API Access and Control:
 
 A GET Request to the module will return status info in JSON format.
 Example of returned output.
