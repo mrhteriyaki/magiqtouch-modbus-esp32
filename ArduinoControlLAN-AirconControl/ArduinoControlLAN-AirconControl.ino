@@ -289,7 +289,7 @@ void webRootResponse() {
   hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
 
 
-  /*
+  
   char eb1008char[109 * 4];
   eb1008char[0] = '\0';  // Initialize the string as empty
   for (size_t i = 0; i < 109; i++) {
@@ -300,8 +300,8 @@ void webRootResponse() {
       strcat(eb1008char, ",");
     }
   }
-  hvacJson["eb1008e60032_request"] = eb1008char;
-  */
+  hvacJson["eb1008e60032_cp1data"] = eb1008char;
+  
 
   unlockVariable();
 
@@ -636,8 +636,8 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
       CommandInfo = powermsgval;
       SystemPower = (SystemPowerInfo == 1);
 
-      HeaterZone1 = ((Zone1EnabledInfo & 1) == 1);
-      HeaterZone2 = ((Zone2EnabledInfo & 1) == 1);
+      HeaterZone1 = (Zone1EnabledInfo == 1);
+      HeaterZone2 = (Zone2EnabledInfo == 1);
       TargetTemp = TargetTempInfo;
       TargetTemp2 = TargetTemp2Info;
 
@@ -696,8 +696,9 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     TargetTempInfo = msgBuffer[44];  //Evap,Heater Temp Target
     TargetTemp2Info = msgBuffer[90];
     ThermisterTempInfo = msgBuffer[46];
-    Zone1EnabledInfo = msgBuffer[80];  //Zone 1 Enabled
-    Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
+    Zone1EnabledInfo = msgBuffer[80] & 1;  //Zone 1 Enabled (LSB)
+    Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1; //Zone 2 Enabled (2nd LSB)
+    //Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
 
     unlockVariable();
