@@ -1,39 +1,41 @@
 # MagIQTouch Modbus
 
-This is a project to control Seeley MagIQTouch based HVAC System using an ESP32.
+This is a project to control Seeley MagIQTouch based HVAC System using an ESP32.  
 Provides a basic REST API for monitoring and control.
 
-## Related Home Assistant Integration:
+### Home Assistant Integration:
 https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
 
 
-Working with configuration:
+Working with system configuration:
 - Evaporative Cooler
 - Gas Heater
 - 2 Zones and Wall Controllers.
-- Fan Modes External and Recycle.
+- Fan Modes External and Recycle.  
 
 
 Hardware List:
 - FireBeetle ESP32 (DFRobot) - Any ESP32 with 2 UART ports should also work.
-- 2x RS485 Modules (SeeedStudio - 103020193) - Available in AUS at Element14 as "Serial Communication Board, RS485"
+- 2x RS485 Modules (SeeedStudio - 103020193)  
+Available in AUS at Element14 as "Serial Communication Board, RS485"
 - 5V DC Power Supply
 
 Cable / Connector List: 
 - 2x RJ45 Connectors (Regular network jack, requires a 'punch down tool')
-- Groove to Female Pin cables (SS110990028 / Seeed Grove - 4 pin Female Jumper to Grove 4 pin Conversion Cable) 
+- Groove to Female Pin cables (SS110990028)
 - 6P6C Cable if you are not replacing the original WiFi module.
 
 
 Preparation Steps:
 - Download and Install Arduino IDE (Free).
 - Download the folder from this repository ArduinoControlLAN-AirconControl
-- Under Tools, Board manager install the package "esp32 by Espressif Systems" - Version 2.0.17 (V3 does not work correctly in testing).
+- Under Tools, Board manager install the package "esp32 by Espressif Systems"  
+**Use version 2.0.17 (v3 does not work correctly in testing).**
 
 ## Basic Setup Steps: 
 - Set your WiFi Network name and password in the WiFiSettings.h file.
 - Flash the ArduinoControlLAN-AirconControl.INO code to the ESP32 with the Arduino IDE.
-- Check serial output for the IP address (Optional), Set a reservation for the IP on your DHCP Server / router to prevent address changes.
+- Check serial output for the IP address (Optional).
 - Connect Modules as per diagram below.
 
 ![diagram](Images/diagram.png)
@@ -46,33 +48,31 @@ Preparation Steps:
 | RS485 A | Orange/White |
 | RS485 B | Solid Blue |
 
-The cables from the control panel and control board use a 6P6C male connector.
-A standard 8P8C / RJ45 female jack can be used to connect to the cables to the ESP Module.
-The connector to the system board only requires  A,B and ground.
-The connector to the control panel requires A,B, GND and 5V to power the panel.
+The cables from the control panel and control board use a 6P6C male connector.  
+A standard 8P8C / RJ45 female jack can be used to connect to the cables to the ESP Module.  
+The connector to the system board only requires  A,B and ground.  
+The connector to the control panel requires A,B, GND and 5V to power the panel.  
 
-The 5v power should also be connected to the 5V Pin on the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.
-The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.
+The 5v power should also be connected to the 5V Pin on the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.  
+The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.  
 
 
 
 ![RJ45](Images/rj45.PNG)
 
-The devices wired up inside 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.
-(Image reflects older wiring with 9/10 pins, has been moved to use alternate pins since photo was taken.)
+The devices wired up inside 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.  
+(Image reflects older wiring with 9/10 pins, has been moved to use alternate pins since photo was taken.)  
 
 ![insidebox](Images/inside_box.jpg)
 
-Mounted inside the return air wallspace:
-
+Mounted inside the return air wallspace:  
 ![mounted](Images/mounted.jpg)
 
 
-Here's the pin layout for the original Connector too.
-
+Here's the pin layout for the original Connector too.  
 ![Pinout](Images/Pinout.png)
 
-The GND and VCC are linked, purpose is likely to reduce cable resistance.
+The GND and VCC are linked, purpose is likely to reduce cable resistance.  
 
 | Pin | Wire Colour | Function |
 |-----|-------------|----------|
