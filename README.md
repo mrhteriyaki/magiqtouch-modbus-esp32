@@ -1,10 +1,7 @@
 # MagIQTouch Modbus
 
 This is a project to control Seeley MagIQTouch based HVAC System using an ESP32.
-It replaces the official IOT/WiFi module for remote access and emulates the responses sent by the original unit.
-The device will proxy modbus messages inbetween the primary control panel and other devices.
-A web server is run on the ESP module for access and control.
-Designed to be used as a basic API for other automation systems to control.
+Provides a basic REST API for monitoring and control.
 
 ## Related Home Assistant Integration:
 https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
@@ -12,71 +9,52 @@ https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
 
 Working with configuration:
 - Evaporative Cooler
-- Gas Heater 
-- 2 Zones
-- 2 Wall Controllers.
+- Gas Heater
+- 2 Zones and Wall Controllers.
+- Fan Modes External and Recycle.
 
-Current Limitations:
-- Refrigerated Cooling
-- Zones 3 & 4 (Values are likely next in order from existing zone data)
-- Zone 1 temp sensor is not always updated, update only occurs when using a Cooler/Heater on temperature mode. Additional zones are reported accurately using their update message to primary control panel.
-  (Temp reporting issue seems to occur in official module too, incorrectly reports temperature on app when using Fan mode).
-- Has only been tested with controller version R719.
-- WiFi controller status does not reflect ESP WiFi state.
 
 Hardware List:
-- FireBeetle ESP32 (DFRobot) - Any ESP32 that has 2x additional UART ports for the RS458 modules should work.
+- FireBeetle ESP32 (DFRobot) - Any ESP32 with 2 UART ports should also work.
 - 2x RS485 Modules (SeeedStudio - 103020193) - Available in AUS at Element14 as "Serial Communication Board, RS485"
-- 2x RJ45 Connectors (Regular network jack)
-- 2EDGRK Connectors (Optional)
-- Ethernet Cable Wire (Solid Core)
+- 5V DC Power Supply
+
+Cable / Connector List: 
+- 2x RJ45 Connectors (Regular network jack, requires a 'punch down tool')
 - Groove to Female Pin cables (SS110990028 / Seeed Grove - 4 pin Female Jumper to Grove 4 pin Conversion Cable) 
-
-Tools: 
-- Krone Tool
-- Wire Strippers
-- Screw Driver
-
-Connection list for the RS485 Modules to the ESP Module.
-|ESP32 PIN|RS485 Module|
-|-----------------|----------------|
-|D1/IO16|Module 1 - TX|
-|LRCK/IO17|Module 1 - RX|
-|IO26/D3|Module 2 - TX|
-|IO27/D4|Module 2 - RX|
+- 6P6C Cable if you are not replacing the original WiFi module.
 
 
-Basic steps of this project:
-- Purchase the required hardware.
+Preparation Steps:
 - Download and Install Arduino IDE (Free).
-- Update the WiFiSettings.h file under ArduinoControlLAN-AirconControl with your SSID/Passkey to connect to the WiFi network.
-- Under Tools, Board manager install the package for your ESP32 device. FireBeetle works with "esp32 by Espressif Systems" - Version 2.0.17 Tested. v3 has serial issues with the Gen1 Firebeetle.
-- Open the ArduinoControlLAN-AirconControl.INO file under ArduinoControlLAN-AirconControl and upload it to your ESP32 with the Arduino IDE.
-- Check the serial output for the IP Address which will be printed at startup after WiFi connects, recommend reserving the address on your DHCP server.
-- Connect RS485 Modules to the ESP32 as per above pinout list above.
-- Disconnect the existing original WiFi IOT Module.
-- Connect cables to the ESEP32-RS485 Modules (See connector info below for more detail).
+- Download the folder from this repository ArduinoControlLAN-AirconControl
+- Under Tools, Board manager install the package "esp32 by Espressif Systems" - Version 2.0.17 (V3 does not work correctly in testing).
 
-ArduinoControlLAN-AirconMonitor code can also be used as a monitor of the modbus. (Useful for testing new configurations).
+## Basic Setup Steps: 
+- Set your WiFi Network name and password in the WiFiSettings.h file.
+- Flash the ArduinoControlLAN-AirconControl.INO code to the ESP32 with the Arduino IDE.
+- Check serial output for the IP address (Optional), Set a reservation for the IP on your DHCP Server / router to prevent address changes.
+- Connect Modules as per diagram below.
 
-Connector Info:
-The cables from the control panel and control board use a 6P6C male connector.
-To avoid cutting the original cables, a standard 8P8C / RJ45 female jack can be used to connect to the individual wires.
+![diagram](Images/diagram.png)
 
-The connector that goes to the control board only needs A,B and a single ground.
-The connector to the wall control panel requires both GND and 5V connected as this powers the panel.
-
-I have used a female DC barell cable to re-use the original 5V Power supply from the IOT/WiFi Module.
-This 5v power is connected to the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.
-
-The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.
-
+## RS485 to RJ45 Wiring
 | RS485 Module | RJ45 Wire (A Wiring) |
 |--------------|-----------|
 | 5V (Control Panel Port Only) | Solid Green and Solid Orange |
 | GND | Brown/White and Blue/White. |
 | RS485 A | Orange/White |
 | RS485 B | Solid Blue |
+
+The cables from the control panel and control board use a 6P6C male connector.
+A standard 8P8C / RJ45 female jack can be used to connect to the cables to the ESP Module.
+The connector to the system board only requires  A,B and ground.
+The connector to the control panel requires A,B, GND and 5V to power the panel.
+
+The 5v power should also be connected to the 5V Pin on the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.
+The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.
+
+
 
 ![RJ45](Images/rj45.PNG)
 
@@ -116,19 +94,20 @@ Example of returned output.
 {
   "module_name": "ESP32-HVAC-Control",
   "system_power": 1,
-  "system_mode": 2,
-  "target_temp": 20,
-  "target_temp_zone2": 11,
-  "evap_mode": 37,
+  "system_mode": 0,
+  "target_temp": 22,
+  "target_temp_zone2": 13,
+  "evap_mode": 169,
   "evap_fanspeed": 8,
   "heater_mode": 0,
   "heater_fanspeed": 0,
-  "heater_therm_temp": 31,
+  "heater_therm_temp": 20,
   "heater_zone1_enabled": 1,
-  "heater_zone2_enabled": 1,
-  "zone1_temp_sensor": 27,
-  "zone2_temp_sensor": 24,
-  "panel_command_count": 458
+  "heater_zone2_enabled": 0,
+  "zone1_temp_sensor": 21,
+  "zone2_temp_sensor": 20,
+  "panel_command_count": 83,
+  "automatic_clean_running": 0
 }
 ```
 
@@ -208,3 +187,10 @@ If you are prompted for a code, try **7378** (this is the code printed in my man
 Note the WiFi status does not reflect the actual WiFi signal and uses a static code to fake the report.
 
 
+## Limitation Notes
+- Refrigerated Cooling not tested or supported.
+- Zones 3 & 4 not implemented. (Values are likely next in order from existing zone data)
+- Zone 1 temp sensor does not report correctly on non-temperature target modes.
+  (Temp reporting issue seems to occur in official module too, incorrectly reports temperature on app when using Fan mode).
+- Has only been tested with controller version R719.
+- WiFi controller status does not reflect ESP WiFi state.
