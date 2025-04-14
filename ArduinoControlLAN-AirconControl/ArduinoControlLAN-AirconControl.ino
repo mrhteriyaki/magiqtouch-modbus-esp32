@@ -8,12 +8,13 @@
 //Default serial IO9/10 dont work, alternate serial pins resolved serial relay issue.
 //Web Stops responding after bootup - not tested.
 
+
 //Libraries.
-#include <WiFi.h>
-#include <WiFiClient.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
-#include "WiFiSettings.h"
+
+#include "NetworkSettings.h"
+
 
 //Max message size for modbus, reduce due to ram usage.
 #define MAXMSGSIZE 512
@@ -192,8 +193,8 @@ void setup() {
   Serial.begin(9600);
   Serial.println("OK");
   //Set Serial, Baud Rate, 8 bit no parity, RX,TX 
-  Serial1.begin(9600, SERIAL_8N1, 26, 27);  
-  Serial2.begin(9600, SERIAL_8N1, 16, 17);  
+  Serial1.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);  
+  Serial2.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);  
 
 
   msgSemaphore = xSemaphoreCreateMutex();
@@ -202,19 +203,7 @@ void setup() {
   //Prefill messages used for webserver.
   memset(eb1008e60032_request, 0, 109);
 
-
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Waiting for WiFi to Connect");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
+  LanController::Setup();
 
   //Start the web server
   server.on("/", HTTP_GET, webRootResponse);

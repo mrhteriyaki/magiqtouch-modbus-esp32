@@ -15,7 +15,7 @@ Working with system configuration:
 
 
 Hardware List:
-- FireBeetle ESP32 (DFRobot) - Any ESP32 with 2 UART ports should also work.
+- ESP32 - (FireBeetle ESP32 DFRobot has been tested using WiFi and WT32-ETH01 works with the Ethernet version)
 - 2x RS485 Modules (SeeedStudio - 103020193)  
 Available in AUS at Element14 as "Serial Communication Board, RS485"
 - 5V DC Power Supply
@@ -27,18 +27,25 @@ Cable / Connector List:
 
 
 Preparation Steps:
-- Download and Install Arduino IDE (Free).
-- Download the folder from this repository ArduinoControlLAN-AirconControl
+- Download and Install Arduino IDE.
+- Download the folder from this repository ArduinoControlLAN-AirconControl (For wired ethernet use ArduinoControlLAN-AirconControlEthernet)
 - Under Tools, Board manager install the package "esp32 by Espressif Systems"  
 **Use version 2.0.17 (v3 does not work correctly in testing).**
 
 ## Basic Setup Steps: 
-- Set your WiFi Network name and password in the WiFiSettings.h file.
+- Set your WiFi Network name and password in the NetworkSettings.h file. (Skip for Wired Ethernet)
 - Flash the ArduinoControlLAN-AirconControl.INO code to the ESP32 with the Arduino IDE.
 - Check serial output for the IP address (Optional).
 - Connect Modules as per diagram below.
 
 ![diagram](Images/diagram.png)
+
+For ethernet module, the pinouts are different.  
+IO5  / RX2 -> RS485 Module 1 TX  
+IO17 / TX2 -> RS485 Module 1 RX  
+IO14 -> RS485 Module 2 TX  
+IO15 -> RS485 Module 2 RX  
+
 
 ## RS485 to RJ45 Wiring
 | RS485 Module | RJ45 Wire (A Wiring) |
@@ -53,9 +60,10 @@ A standard 8P8C / RJ45 female jack can be used to connect to the cables to the E
 The connector to the system board only requires  A,B and ground.  
 The connector to the control panel requires A,B, GND and 5V to power the panel.  
 
-The 5v power should also be connected to the 5V Pin on the ESP32, both RS485 modules and one of the RJ45 ports to power the control panel.  
-The pinout on the rear of an RJ45 jack can vary with A/B positions, the colours need to be matched for the correct wire position.  
-
+The 5v power should also be connected to the 5V Pin on the ESP32,  
+both RS485 modules and one of the RJ45 ports to power the control panel.  
+The pinout on the rear of an RJ45 jack can vary with A/B positions,  
+the colours need to be matched for the correct wire position.  
 
 
 ![RJ45](Images/rj45.PNG)
