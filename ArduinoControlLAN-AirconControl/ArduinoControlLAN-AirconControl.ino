@@ -1,4 +1,4 @@
-//Firebeetle ESP32 Aircon Interface
+//ESP32 Aircon Interface
 //Board Library esp32 by Espressif Systems in use.
 
 //Espressif Board Library 3.x is not stable.
@@ -12,8 +12,10 @@
 //Libraries.
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include <esp_timer.h>
 
 #include "NetworkSettings.h"
+#include "PinSettings.h"
 
 
 //Max message size for modbus, reduce due to ram usage.
@@ -192,9 +194,9 @@ void unlockVariable() {
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
-  //Set Serial, Baud Rate, 8 bit no parity, RX,TX 
-  Serial1.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);  
-  Serial2.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);  
+  //Set Serial, Baud Rate, 8 bit no parity, RX,TX
+  Serial1.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);
+  Serial2.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);
 
 
   msgSemaphore = xSemaphoreCreateMutex();
@@ -224,6 +226,7 @@ void Core1Loop(void* parameter) {
   while (true) {
     relaySerial(Serial1, Serial2, serial1buffer, serial1Index, s1previousMillis, 1);
     relaySerial(Serial2, Serial1, serial2buffer, serial2Index, s2previousMillis, 2);
+    vTaskDelay(1);  //Small delay to prevent CPU hogging.
   }
 }
 
@@ -242,7 +245,9 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
     previousMillis = currentMillis;  //Save current time byte is received.
 
     if (index == MAXMSGSIZE) {
-      Serial.println("ERROR: Buffer limit reach - MAXMSGSIZE limit is a problem. Resync triggered.");
+      if (SerialOutputModbus) {
+        Serial.println("ERROR: Buffer limit reach - MAXMSGSIZE limit is a problem. Resync triggered.");
+      }
       index = 0;
     }
 
@@ -259,8 +264,9 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
 void webRootResponse() {
   lockVariable();
 
-  DynamicJsonDocument hvacJson = DynamicJsonDocument(1000);
+  StaticJsonDocument<4096> hvacJson;
   hvacJson["module_name"] = "ESP32-HVAC-Control";
+  hvacJson["uptime"] = getUptimeFormatted();
   hvacJson["system_power"] = SystemPowerInfo;
   hvacJson["system_mode"] = SystemMode;
   hvacJson["target_temp"] = TargetTempInfo;
@@ -277,8 +283,6 @@ void webRootResponse() {
   hvacJson["panel_command_count"] = CommandInfo;
   hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
 
-
-  
   char eb1008char[109 * 4];
   eb1008char[0] = '\0';  // Initialize the string as empty
   for (size_t i = 0; i < 109; i++) {
@@ -290,7 +294,7 @@ void webRootResponse() {
     }
   }
   hvacJson["eb1008e60032_cp1data"] = eb1008char;
-  
+
 
   unlockVariable();
 
@@ -303,63 +307,92 @@ void webRootResponse() {
 void webCommandResponse() {
   if (server.hasArg("plain")) {         // Check if the body exists
     String body = server.arg("plain");  // Get the body of the POST request
-    Serial.println("Web request: " + body);
+    if (SerialOutputModbus) {
+      Serial.println("Web request: " + body);
+    }
     lockVariable();
     if (body.indexOf("power=on") != -1) {  // Check if "D1" is in the body
       SystemPower = true;
-      Serial.println("System Power set to True");
+      if (SerialOutputModbus) {
+        Serial.println("System Power set to True");
+      }
     } else if (body.indexOf("power=off") != -1) {
       SystemPower = false;
-      Serial.println("System Power set to false");
+      if (SerialOutputModbus) {
+        Serial.println("System Power set to false");
+      }
+
     } else if (body.indexOf("zone1=on") != -1) {
       HeaterZone1 = true;
-      Serial.println("Enabled Zone 1");
+      if (SerialOutputModbus) {
+        Serial.println("Enabled Zone 1");
+      }
+
     } else if (body.indexOf("zone1=off") != -1) {
       HeaterZone1 = false;
-      Serial.println("Disabled Zone 1");
+      if (SerialOutputModbus) {
+        Serial.println("Disabled Zone 1");
+      }
     } else if (body.indexOf("zone2=on") != -1) {
       HeaterZone2 = true;
-      Serial.println("Enabled Zone 2");
+      if (SerialOutputModbus) {
+        Serial.println("Enabled Zone 2");
+      }
     } else if (body.indexOf("zone2=off") != -1) {
       HeaterZone2 = false;
-      Serial.println("Disabled Zone 2");
+      if (SerialOutputModbus) {
+        Serial.println("Disabled Zone 2");
+      }
+
     } else if (body.indexOf("serial=on") != -1) {
       SerialOutputModbus = true;
+      Serial.println("Serial Output Enabled");
     } else if (body.indexOf("serial=off") != -1) {
       SerialOutputModbus = false;
+      Serial.println("Serial Output Disabled");
     } else if (body.startsWith("fanspeed=")) {
       int number = body.substring(9).toInt();
       if (number >= 1 && number <= 10) {
         FanSpeed = number;
       }
-      Serial.println("Fan speed set to " + String(FanSpeed));
+      if (SerialOutputModbus) {
+        Serial.println("Fan speed set to " + String(FanSpeed));
+      }
+
     } else if (body.startsWith("mode=")) {
       int number = body.substring(5).toInt();
       if (number >= 0 && number <= 5) {
         SystemMode = number;
       }
-      Serial.println("System mode set to " + String(SystemMode));
+      if (SerialOutputModbus) {
+        Serial.println("System mode set to " + String(SystemMode));
+      }
     } else if (body.startsWith("temp=")) {
       int number = body.substring(5).toInt();
       if (number >= 0 && number <= 28) {
         TargetTemp = number;
       }
-      Serial.println("Target Temp set to " + String(TargetTemp));
+      if (SerialOutputModbus) {
+        Serial.println("Target Temp set to " + String(TargetTemp));
+      }
     } else if (body.startsWith("temp2=")) {
       int number = body.substring(6).toInt();
       if (number >= 0 && number <= 28) {
         TargetTemp2 = number;
       }
-      Serial.println("Target Temp set to " + String(TargetTemp2));
+      if (SerialOutputModbus) {
+        Serial.println("Target Temp set to " + String(TargetTemp2));
+      }
     }
     sendCommand = true;  //Force command update
     unlockVariable();
 
-
     server.send(200, "text/plain", "OK");
   } else {
     server.send(400, "text/plain", "No body received.");
-    Serial.println("Failed to send reply to command - no body received.");
+    if (SerialOutputModbus) {
+      Serial.println("Failed to send reply to command - no body received.");
+    }
   }
 }
 
@@ -685,8 +718,8 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     TargetTempInfo = msgBuffer[44];  //Evap,Heater Temp Target
     TargetTemp2Info = msgBuffer[90];
     ThermisterTempInfo = msgBuffer[46];
-    Zone1EnabledInfo = msgBuffer[80] & 1;  //Zone 1 Enabled (LSB)
-    Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1; //Zone 2 Enabled (2nd LSB)
+    Zone1EnabledInfo = msgBuffer[80] & 1;         //Zone 1 Enabled (LSB)
+    Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1;  //Zone 2 Enabled (2nd LSB)
     //Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
 
@@ -746,4 +779,18 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
     Serial1.write(lowByte);
     Serial2.write(lowByte);
   }
+}
+
+
+String getUptimeFormatted() {
+  uint64_t totalSeconds = esp_timer_get_time() / 1000000ULL;
+  
+  uint32_t hours = totalSeconds / 3600;
+  uint32_t minutes = (totalSeconds % 3600) / 60;
+  uint32_t seconds = totalSeconds % 60;
+  
+  char buffer[9]; // 8 characters for HH:MM:SS plus null terminator
+  snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, seconds);
+  
+  return String(buffer);
 }

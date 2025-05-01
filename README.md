@@ -101,21 +101,23 @@ Example of returned output.
 ```json
 {
   "module_name": "ESP32-HVAC-Control",
-  "system_power": 1,
+  "uptime": "00:03:00",
+  "system_power": 0,
   "system_mode": 0,
-  "target_temp": 22,
+  "target_temp": 20,
   "target_temp_zone2": 13,
   "evap_mode": 169,
-  "evap_fanspeed": 8,
+  "evap_fanspeed": 0,
   "heater_mode": 0,
   "heater_fanspeed": 0,
-  "heater_therm_temp": 20,
-  "heater_zone1_enabled": 1,
+  "heater_therm_temp": 15,
+  "heater_zone1_enabled": 0,
   "heater_zone2_enabled": 0,
-  "zone1_temp_sensor": 21,
-  "zone2_temp_sensor": 20,
-  "panel_command_count": 83,
-  "automatic_clean_running": 0
+  "zone1_temp_sensor": 157,
+  "zone2_temp_sensor": 21,
+  "panel_command_count": 0,
+  "automatic_clean_running": 0,
+  "eb1008e60032_cp1data": "235,16,8,230,0,50,100,0,0,0,199,0,169,1,64,0,60,0,0,0,0,0,2,0,2,0,15,0,52,5,241,20,126,0,0,0,0,0,0,0,0,12,0,0,20,0,15,2,205,1,116,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,4,0,0,0,80,0,80,0,0,0,0,0,0,0,0,0,0,0,0,157,20,21,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,146,43"
 }
 ```
 
