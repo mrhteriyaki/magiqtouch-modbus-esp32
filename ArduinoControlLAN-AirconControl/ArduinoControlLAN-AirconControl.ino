@@ -226,7 +226,7 @@ void Core1Loop(void* parameter) {
   while (true) {
     relaySerial(Serial1, Serial2, serial1buffer, serial1Index, s1previousMillis, 1);
     relaySerial(Serial2, Serial1, serial2buffer, serial2Index, s2previousMillis, 2);
-    vTaskDelay(1);  //Small delay to prevent CPU hogging.
+    delay(1);  //Small delay to prevent CPU hogging.
   }
 }
 
