@@ -165,8 +165,9 @@ Known Slave IDs:
 
 
 ## New Module Setup.
-These steps are to configure the system with the WiFi IOT module.
-If you use the official WiFi module already these steps are not required as it should already be part of your system from the original module setup.
+These are the steps to add the module to your system.
+If you use the official WiFi IOT module these steps are not required as it should already be configured for your system.
+Swapping from the official module to this ESP Module does not require reconfiguration.
 
 1. Go to Settings -> General -> System Configuration (Bottom of the list)
 If you are prompted for a code, try **7378** (this is the code printed in my manual, if it doesnt work check your manual as it has the service code).
@@ -204,3 +205,4 @@ Note the WiFi status does not reflect the actual WiFi signal and uses a static c
   (Temp reporting issue seems to occur in official module too, incorrectly reports temperature on app when using Fan mode).
 - Has only been tested with controller version R719.
 - WiFi controller status does not reflect ESP WiFi state.
+- This project does not support the RF 'Wireless' Magiqtouch Controller as they do not support the official WiFi module.
