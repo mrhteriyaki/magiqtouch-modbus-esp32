@@ -1,22 +1,14 @@
 //ESP32 Aircon Interface
 //Board Library esp32 by Espressif Systems in use.
 
-//Espressif Board Library 3.x is not stable.
-//Ensure board library used is 2.0.17
-
-//Testing with v3 issues.
-//Default serial IO9/10 dont work, alternate serial pins resolved serial relay issue.
-//Web Stops responding after bootup - not tested.
-
-
 //Libraries.
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
+#include <HardwareSerial.h>
 
 #include "NetworkSettings.h"
 #include "PinSettings.h"
-
 
 //Max message size for modbus, reduce due to ram usage.
 #define MAXMSGSIZE 512
@@ -25,15 +17,18 @@
 
 WebServer server(80);
 
+HardwareSerial SerialA(1);
+HardwareSerial SerialB(2);
+
 SemaphoreHandle_t msgSemaphore;
 
 unsigned long s1previousMillis = 0;
-uint8_t serial1buffer[MAXMSGSIZE];
-int serial1Index = 0;
+uint8_t SerialAbuffer[MAXMSGSIZE];
+int SerialAIndex = 0;
 
 unsigned long s2previousMillis = 0;
-uint8_t serial2buffer[MAXMSGSIZE];
-int serial2Index = 0;
+uint8_t SerialBbuffer[MAXMSGSIZE];
+int SerialBIndex = 0;
 
 bool SerialOutputModbus = false;
 
@@ -45,15 +40,6 @@ uint8_t TargetTemp = 20;
 uint8_t TargetTemp2 = 20;
 bool HeaterZone1 = false;
 bool HeaterZone2 = false;
-
-
-//Modes.
-//0 = External Fan
-//1 = Fan Recycle
-//2 = Cooler Manual
-//3 = Cooler Auto (Temp Mode)
-//4 = Heater
-
 
 //Aircon Info Variables.
 uint16_t CommandInfo = 0x0;  //Increments on command change from Control Panel.
@@ -89,12 +75,9 @@ uint8_t x14v = 0x00;  //zone control.
 uint8_t x17v = 0x14;  //Zone 2 Temp - Default 20C
 uint8_t x18v = 0x14;  //Zone 1 Temp
 
-
-
 //Request for IOT Module info - Sends MAC address.
 uint8_t IOTModuleInfoRequest[] = { 0xEB, 0x03, 0x03, 0xE4, 0x00, 0x05, 0xD3, 0x70 };
 uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B, 0xA8, 0x11 };  //15 bytes length
-
 
 //Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
 uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  //CRC included.
@@ -109,7 +92,8 @@ uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  //
 uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  //Main info update from CP1 to IOT module.
 uint8_t eb1008e60032_request[109];
 
-
+String jsonstring;
+StaticJsonDocument<4096> hvacJson;
 
 
 #if defined(ARDUINO) && defined(__AVR__)
@@ -188,52 +172,53 @@ void unlockVariable() {
   xSemaphoreGive(msgSemaphore);
 }
 
-
-
-
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
   //Set Serial, Baud Rate, 8 bit no parity, RX,TX
-  Serial1.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);
-  Serial2.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);
-
+  SerialA.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);
+  SerialB.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);
 
   msgSemaphore = xSemaphoreCreateMutex();
-
 
   //Prefill messages used for webserver.
   memset(eb1008e60032_request, 0, 109);
 
+  //Start Modbus Proxy
+  xTaskCreatePinnedToCore(ModbusRelayLoop, "ModbusRelayLoop", 16384, NULL, 1, NULL, 1);
+
   LanController::Setup();
 
-  //Start the web server
+  xTaskCreate(WebServerTask, "WebServerTask", 16384, NULL, 1, NULL);
+}
+
+
+void loop() {
+  vTaskDelay(100);
+}
+
+void WebServerTask(void* parameter) {
   server.on("/", HTTP_GET, webRootResponse);
   server.on("/command", HTTP_POST, webCommandResponse);
   server.begin();
 
-  //Run serial proxy on second core.
-  xTaskCreatePinnedToCore(Core1Loop, "Core1Loop", 10000, NULL, 1, NULL, 1);
-}
-
-void loop() {
-  server.handleClient();
-}
-
-
-void Core1Loop(void* parameter) {
-  Serial.println("Serial relay started");
   while (true) {
-    relaySerial(Serial1, Serial2, serial1buffer, serial1Index, s1previousMillis, 1);
-    relaySerial(Serial2, Serial1, serial2buffer, serial2Index, s2previousMillis, 2);
-    delay(1);  //Small delay to prevent CPU hogging.
+    server.handleClient();
+    LanController::DisconnectCheck();
+    vTaskDelay(1);
   }
 }
 
-void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint8_t* buffer, int& index, unsigned long& previousMillis, int serialNumber) {
 
+void ModbusRelayLoop(void* parameter) {
+  while (true) {
+    relaySerial(SerialA, SerialB, SerialAbuffer, SerialAIndex, s1previousMillis, 1);
+    relaySerial(SerialB, SerialA, SerialBbuffer, SerialBIndex, s2previousMillis, 2);
+  }
+}
+
+void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint8_t* buffer, int& index, unsigned long& previousMillis, int serialPort) {
   while (inputSerial.available()) {
-    // Relay byte.
     uint8_t incomingByte = inputSerial.read();
     outputSerial.write(incomingByte);
 
@@ -251,9 +236,9 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
       index = 0;
     }
 
-    buffer[index++] = incomingByte;  //Store rx byte into buffer.
-
-    if (ProcessMessage(buffer, index, serialNumber) == true) {
+    //Save byte to buffer and process message.
+    buffer[index++] = incomingByte;
+    if (ProcessMessage(buffer, index, serialPort)) {
       index = 0;
     }
   }
@@ -264,7 +249,7 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
 void webRootResponse() {
   lockVariable();
 
-  StaticJsonDocument<4096> hvacJson;
+  hvacJson.clear();
   hvacJson["module_name"] = "ESP32-HVAC-Control";
   hvacJson["uptime"] = getUptimeFormatted();
   hvacJson["system_power"] = SystemPowerInfo;
@@ -298,7 +283,6 @@ void webRootResponse() {
 
   unlockVariable();
 
-  String jsonstring;
   serializeJsonPretty(hvacJson, jsonstring);
   server.send(200, "application/json", jsonstring);
 }
@@ -396,28 +380,25 @@ void webCommandResponse() {
   }
 }
 
-
-
-
 bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
-  if (msgLength < 4) {  //Min message length.
+  if (msgLength < 4) {  //Skip messages below min length.
     return false;
   }
-  uint16_t crcraw = (msgBuffer[msgLength - 2] << 8 | msgBuffer[msgLength - 1]);  //crc from message
-  uint16_t expectedcrc = modbusCRC(msgBuffer, msgLength - 2);                    //calculated crc from message.
+  //CRC Message Validation
+  uint16_t crcraw = (msgBuffer[msgLength - 2] << 8 | msgBuffer[msgLength - 1]);
+  uint16_t expectedcrc = modbusCRC(msgBuffer, msgLength - 2);
   if (crcraw == expectedcrc) {
-
-    //Print message to serial port.
     if (SerialOutputModbus) {
       SerialPrintMessage(msgBuffer, msgLength, SerialID);
     }
 
-    IoTModuleMessageProcess(msgBuffer, msgLength);  //Send confirmations for normal messages sent to IOT Module.
+    //Seperate Processing functions for each message source/destination.
 
-    EvapInfoUpdate(msgBuffer, msgLength);
-    HeaterInfoUpdate(msgBuffer, msgLength);
-    Panel1Info(msgBuffer, msgLength);
-    Panel2Info(msgBuffer, msgLength);
+    IoTModuleMessageProcess(msgBuffer, msgLength);  //IOT Module
+    //EvapInfoUpdate(msgBuffer, msgLength); //Evap Unit
+    //HeaterInfoUpdate(msgBuffer, msgLength); //Heater Unit
+    //Panel1Info(msgBuffer, msgLength); //Control Panel 1
+    Panel2Info(msgBuffer, msgLength);  //Control Panel 2.
 
     return true;
   }
@@ -430,11 +411,10 @@ void EvapInfoUpdate(uint8_t* msgBuffer, int msgLength) {
   if (checkPattern(msgBuffer, evapInfoResponse, 3)) {
     //Aircon unit info - Pump State, Active fan mode?
   }
-
-  //Fan Speed
 }
 
 void HeaterInfoUpdate(uint8_t* msgBuffer, int msgLength) {
+  //Active Fan speed?
 }
 
 
@@ -507,11 +487,16 @@ void UpdateCommandMessage() {
   if (x4vl == 0x11 && SystemPower == true) {
     x4vl = 0x10;
     sendCommand = true;
-    Serial.println("System Power turned on.");
+    if (SerialOutputModbus) {
+      Serial.println("System Power turned on.");
+    }
+
   } else if (x4vl == 0x10 && SystemPower == false) {
     x4vl = 0x11;
     sendCommand = true;
-    Serial.println("System Power turned off.");
+    if (SerialOutputModbus) {
+      Serial.println("System Power turned off.");
+    }
   }
 
   uint8_t tmpCfanspeed = 0x41 + (FanSpeed * 2);
@@ -594,7 +579,10 @@ void SendCommandMessage() {
   UpdateCommandMessage();
 
   if (sendCommand) {
-    Serial.println("Command Triggered from IOT Request");
+    if (SerialOutputModbus) {
+      Serial.println("Command Triggered from IOT Request");
+    }
+
     if (x2vl == 0xFF) {
       x2vl = 0x0;
     } else {
@@ -618,8 +606,6 @@ void SetXVal(uint8_t* val, uint8_t newVal) {
     sendCommand = true;
   }
 }
-
-
 
 
 void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
@@ -652,12 +638,13 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
 
     //Check for Changes from panel.
     if (powermsgval != CommandInfo) {
-      Serial.println("Settings change has occured from control panel");
 
+      if (SerialOutputModbus) {
+        Serial.println("Settings change has occured from control panel");
+      }
       lockVariable();
       CommandInfo = powermsgval;
       SystemPower = (SystemPowerInfo == 1);
-
       HeaterZone1 = (Zone1EnabledInfo == 1);
       HeaterZone2 = (Zone2EnabledInfo == 1);
       TargetTemp = TargetTempInfo;
@@ -767,30 +754,30 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
     SerialPrintMessage(msgBuffer, length, 0);
   }
   for (uint8_t i = 0; i < length; i++) {
-    Serial1.write(msgBuffer[i]);
-    Serial2.write(msgBuffer[i]);
+    SerialA.write(msgBuffer[i]);
+    SerialB.write(msgBuffer[i]);
   }
   if (sendcrc) {
     uint16_t crcval = modbusCRC(msgBuffer, length);
     uint8_t highByte = (crcval >> 8) & 0xFF;
     uint8_t lowByte = crcval & 0xFF;
-    Serial1.write(highByte);
-    Serial2.write(highByte);
-    Serial1.write(lowByte);
-    Serial2.write(lowByte);
+    SerialA.write(highByte);
+    SerialB.write(highByte);
+    SerialA.write(lowByte);
+    SerialB.write(lowByte);
   }
 }
 
 
 String getUptimeFormatted() {
   uint64_t totalSeconds = esp_timer_get_time() / 1000000ULL;
-  
+
   uint32_t hours = totalSeconds / 3600;
   uint32_t minutes = (totalSeconds % 3600) / 60;
   uint32_t seconds = totalSeconds % 60;
-  
-  char buffer[9]; // 8 characters for HH:MM:SS plus null terminator
+
+  char buffer[9];  // 8 characters for HH:MM:SS plus null terminator
   snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, seconds);
-  
+
   return String(buffer);
 }

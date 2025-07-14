@@ -30,7 +30,8 @@ Preparation Steps:
 - Download and Install Arduino IDE.
 - Download the folder from this repository ArduinoControlLAN-AirconControl (For wired ethernet use ArduinoControlLAN-AirconControlEthernet)
 - Under Tools, Board manager install the package "esp32 by Espressif Systems"  
-**Use version 2.0.17 (v3 does not work correctly in testing).**
+**Use version 2.0.17**
+**Version 3.2.0 is in testing on Ethernet Module**
 
 ## Basic Setup Steps: 
 - Set your WiFi Network name and password in the NetworkSettings.h file. (Skip for Wired Ethernet)
