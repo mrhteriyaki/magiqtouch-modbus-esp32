@@ -10,18 +10,18 @@
 #define ETH_CLK_MODE ETH_CLOCK_GPIO0_IN
 
 #include <ETH.h>
+#include <WiFi.h>
 
 static bool eth_connected = false;
-
+unsigned long lastEthCheck = 0;
 
 // WARNING: WiFiEvent is called from a separate FreeRTOS task (thread)!
-void WiFiEvent(WiFiEvent_t event)
-{
+void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
       Serial.println("ETH Started");
       //set eth hostname here
-      ETH.setHostname("esp32-ethernet");
+      ETH.setHostname("ESP32-HVAC-ESP");
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
       Serial.println("ETH Connected");
@@ -52,15 +52,33 @@ void WiFiEvent(WiFiEvent_t event)
   }
 }
 
-void LanController::Setup() {
-  WiFi.onEvent(WiFiEvent);  // Will call WiFiEvent() from another thread.
-  //for use of WT32-ETH01 ESP32 Module.
-  //#if ESP_ARDUINO_VERSION_MAJOR >= 3
-   // // The argument order changed in esp32-arduino v3+
-   // ETH.begin(ETH_PHY_LAN8720, 1, 23, 18, 16, ETH_CLOCK_GPIO0_IN);
-  //#else
-    ETH.begin(1, 16, 23, 18, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
-  //#endif
-
+void EthernetStart() {
+//for use of WT32-ETH01 ESP32 Module.
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  // The argument order changed in esp32-arduino v3+
+  ETH.begin(ETH_PHY_LAN8720, 1, 23, 18, 16, ETH_CLOCK_GPIO0_IN);
+#else
+  ETH.begin(1, 16, 23, 18, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
+#endif
 }
 
+
+void LanController::Setup() {
+  Serial.println("Ethernet Network Startup.");
+  Serial.println("Note - Ethernet will not start with programmer connected and powered.");
+  WiFi.onEvent(WiFiEvent);  // Will call WiFiEvent() from another thread.
+  EthernetStart();
+}
+
+
+void LanController::DisconnectCheck() {
+  // Check Ethernet every 30 seconds
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastEthCheck > 30000) {
+    if (!eth_connected) {
+      Serial.println("Ethernet disconnected, attempting to reconnect");
+      EthernetStart();
+    }
+    lastEthCheck = currentMillis;
+  }
+}

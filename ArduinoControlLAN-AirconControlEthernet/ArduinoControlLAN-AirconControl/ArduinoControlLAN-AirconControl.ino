@@ -771,13 +771,11 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
 
 String getUptimeFormatted() {
   uint64_t totalSeconds = esp_timer_get_time() / 1000000ULL;
-
-  uint32_t hours = totalSeconds / 3600;
-  uint32_t minutes = (totalSeconds % 3600) / 60;
-  uint32_t seconds = totalSeconds % 60;
-
-  char buffer[9];  // 8 characters for HH:MM:SS plus null terminator
-  snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, seconds);
-
+  uint32_t days = totalSeconds / 86400;
+  uint32_t hours = (uint32_t)(totalSeconds / 3600);
+  uint32_t minutes = (uint32_t)((totalSeconds % 3600) / 60);
+  uint32_t seconds = (uint32_t)(totalSeconds % 60);
+  char buffer[50];
+  snprintf(buffer, sizeof(buffer), "%ud %02u:%02u:%02u", days, hours, minutes, seconds);
   return String(buffer);
 }

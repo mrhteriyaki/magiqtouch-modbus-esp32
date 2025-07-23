@@ -9,11 +9,13 @@
 #define SERIAL2_RX 16
 #define SERIAL2_TX 17
 
+
 //WiFi Network settings have moved to NetworkSettings.cpp file.
 
 class LanController {
 public:
   static void Setup();
+  static void DisconnectCheck();
 };
 
 #endif

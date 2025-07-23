@@ -5,6 +5,7 @@
 class LanController {
 public:
   static void Setup();
+  static void DisconnectCheck();
 };
 
 #endif
