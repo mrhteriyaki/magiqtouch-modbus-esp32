@@ -3,7 +3,8 @@
 This project is an alternative to the official WiFi Module for the MagiqTouch system.  
 It provides local access and control with a simple [REST API](Docs/Api.md).
 
-### Home Assistant Integration: [https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha)
+### Home Assistant Integration: 
+[https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha)
 
 ### Tested Configuration and Limitations: [Link](Docs/Tested.md)
 
