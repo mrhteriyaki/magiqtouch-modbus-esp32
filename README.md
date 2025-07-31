@@ -43,8 +43,8 @@ However I did not have one available in testing so for this will use a regular 8
 |--------------|-----------|
 | 5V (Control Panel Port Only) | Solid Green and Solid Orange |
 | GND | Brown/White and Blue/White. |
-| RS485 A | Orange/White |
-| RS485 B | Solid Blue |
+| RS485 A | Solid Blue |
+| RS485 B | Orange/White |
 
 The standard 8P8C / RJ45 female ethernet wall jack can be used to connect to the cables to the device.  
 The connector to the system board only requires A,B serial wires and ground.  
