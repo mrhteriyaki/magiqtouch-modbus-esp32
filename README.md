@@ -58,8 +58,10 @@ The pinout on the rear of an RJ45 jack can vary with A/B positions, so make sure
 
 Once you have wired up your device prepared, you should be able to connect it inbetween the heater unit control board and primary control panel.
 
-If you are not replacing an existing WiFi module, you'll need to add it as a module into the system using these steps.  
-[Instructions for New Module](Docs/NewModule.md)
+If you are not replacing an existing WiFi module, you should be prompted when the module is detected to setup the WiFi settings, tap latter on this prompt.  
+Try the the component configuration update if it does not show up in Settings -> Service.
+[Instructions for detecting components](Docs/NewModule.md)
+
 
 Here is my mess wired up inside a 3d printed housing, STL files for 3d printing available in the Housing-CAD-STL folder.  
 (Image reflects older wiring with 9/10 pins, has been moved to use alternate pins since photo was taken.)  
