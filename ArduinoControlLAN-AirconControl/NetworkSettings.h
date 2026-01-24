@@ -15,7 +15,10 @@
 class LanController {
 public:
   static void Setup();
-  static void DisconnectCheck();
+
+private:
+  static void ReconnectLoop(void* parameter);
+  
 };
 
 #endif

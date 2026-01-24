@@ -11,7 +11,7 @@
 #include "PinSettings.h"
 
 //Max message size for modbus, reduce due to ram usage.
-#define MAXMSGSIZE 512
+#define MAXMSGSIZE 256
 #define MAXSLAVEID 30
 #define GAPTHRESHOLD 50
 
@@ -31,6 +31,8 @@ uint8_t SerialBbuffer[MAXMSGSIZE];
 int SerialBIndex = 0;
 
 bool SerialOutputModbus = false;
+
+bool MonitorMode = false;
 
 //Aircon Control Variables.
 bool SystemPower = false;
@@ -78,6 +80,10 @@ uint8_t x18v = 0x14;  //Zone 1 Temp
 //Request for IOT Module info - Sends MAC address.
 uint8_t IOTModuleInfoRequest[] = { 0xEB, 0x03, 0x03, 0xE4, 0x00, 0x05, 0xD3, 0x70 };
 uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B, 0xA8, 0x11 };  //15 bytes length
+
+//0xEB, 0x03, 0x0A, Version, MAC ADDRESS, 0xA8, 0x11
+//Version is 0x01, 0x09, 0x01, 0x09
+//MAC Address = 90:70:65:2C:0B:27
 
 //Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
 uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  //CRC included.
@@ -204,7 +210,6 @@ void WebServerTask(void* parameter) {
 
   while (true) {
     server.handleClient();
-    LanController::DisconnectCheck();
     vTaskDelay(1);
   }
 }
@@ -334,6 +339,15 @@ void webCommandResponse() {
     } else if (body.indexOf("serial=off") != -1) {
       SerialOutputModbus = false;
       Serial.println("Serial Output Disabled");
+    } else if (body.indexOf("monitor=on") != -1) {
+      MonitorMode = true;
+      Serial.println("Monitor Mode On");
+    } else if (body.indexOf("monitor=off") != -1) {
+      MonitorMode = false;
+      Serial.println("Monitor Mode Off");
+    } else if (body.startsWith("send=")) {
+      SendMessageString(body.substring(5));
+
     } else if (body.startsWith("fanspeed=")) {
       int number = body.substring(9).toInt();
       if (number >= 1 && number <= 10) {
@@ -479,7 +493,9 @@ void SendIOTModuleStatus() {
                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                         0x00, 0x00, 0x00, 0x00, 0x04, 0x00 };
-  SendMessage(IOTModuleStatusResponse, 39, true);
+  if (!MonitorMode) {
+    SendMessage(IOTModuleStatusResponse, 39, true);
+  }
 }
 
 
@@ -597,7 +613,9 @@ void SendCommandMessage() {
     x14v, 0x00, 0x00, x17v, x18v, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00
   };  //length is 29
-  SendMessage(IOTCommandMessage, 29, true);
+  if (!MonitorMode) {
+    SendMessage(IOTCommandMessage, 29, true);
+  }
 }
 
 void SetXVal(uint8_t* val, uint8_t newVal) {
@@ -640,7 +658,7 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     if (powermsgval != CommandInfo) {
 
       if (SerialOutputModbus) {
-        Serial.println("Settings change has occured from control panel");
+        Serial.println("Control state has been updated from panel.");
       }
       lockVariable();
       CommandInfo = powermsgval;
@@ -717,13 +735,20 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
 
   //Match initial request with CRC - 8 Bytes.
   if (checkPattern(msgBuffer, IOTModuleInfoRequest, 8)) {
-    SendMessage(IOTModuleInfoResponse, 15, false);
+    if (!MonitorMode) {
+      SendMessage(IOTModuleInfoResponse, 15, false);
+    }
+
     return;
   } else if (checkPattern(msgBuffer, IOTModuleStatusRequest, 8)) {
-    SendIOTModuleStatus();
+    if (!MonitorMode) {
+      SendIOTModuleStatus();
+    }
     return;
   } else if (checkPattern(msgBuffer, IOTModuleCommandRequest, 8)) {
-    SendCommandMessage();
+    if (!MonitorMode) {
+      SendCommandMessage();
+    }
     return;
   }
 }
@@ -735,7 +760,9 @@ bool checkPatternConfirm(uint8_t* msgBuffer, uint8_t* checkpattern) {
       return false;
     }
   }
-  SendMessage(msgBuffer, 8, false);
+  if (!MonitorMode) {
+    SendMessage(msgBuffer, 8, false);
+  }
   return true;
 }
 
@@ -750,22 +777,77 @@ bool checkPattern(uint8_t* msgBuffer, uint8_t* checkpattern, int checklength) {
 }
 
 void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
-  if (SerialOutputModbus) {
-    SerialPrintMessage(msgBuffer, length, 0);
-  }
+
   for (uint8_t i = 0; i < length; i++) {
     SerialA.write(msgBuffer[i]);
     SerialB.write(msgBuffer[i]);
   }
+
+  uint16_t crcval = modbusCRC(msgBuffer, length);
+  uint8_t highByte = (crcval >> 8) & 0xFF;
+  uint8_t lowByte = crcval & 0xFF;
+
   if (sendcrc) {
-    uint16_t crcval = modbusCRC(msgBuffer, length);
-    uint8_t highByte = (crcval >> 8) & 0xFF;
-    uint8_t lowByte = crcval & 0xFF;
     SerialA.write(highByte);
     SerialB.write(highByte);
     SerialA.write(lowByte);
     SerialB.write(lowByte);
   }
+
+  if (SerialOutputModbus) {
+    if (sendcrc) {
+      // Create temporary buffer with CRC included
+      uint8_t tempBuffer[length + 2];
+      memcpy(tempBuffer, msgBuffer, length);
+      tempBuffer[length] = highByte;
+      tempBuffer[length + 1] = lowByte;
+      SerialPrintMessage(tempBuffer, length + 2, 0);
+    } else {
+      SerialPrintMessage(msgBuffer, length, 0);
+    }
+  }
+}
+
+void SendMessageString(String hexString) {
+  hexString.trim();
+  bool inHex = false;
+  int hexDigits = 0;
+  for (int i = 0; i < hexString.length(); i++) {
+    if (isHexadecimalDigit(hexString.charAt(i))) {
+      hexDigits++;
+    }
+  }
+  int hexPairs = (hexDigits + 1) / 2;
+
+  // Create buffer for the message
+  uint8_t* msgBuffer = new uint8_t[hexPairs];
+  int bufferIndex = 0;
+  String hexByte = "";
+
+  // Parse hex string into bytes
+  for (int i = 0; i < hexString.length(); i++) {
+    char c = hexString.charAt(i);
+    if (isHexadecimalDigit(c)) {
+      hexByte += c;
+      if (hexByte.length() == 2) {
+        msgBuffer[bufferIndex] = (uint8_t)strtol(hexByte.c_str(), NULL, 16);
+        bufferIndex++;
+        hexByte = "";
+      }
+    }
+  }
+
+  // Handle case where last hex value is single digit
+  if (hexByte.length() == 1) {
+    msgBuffer[bufferIndex] = (uint8_t)strtol(hexByte.c_str(), NULL, 16);
+    bufferIndex++;
+  }
+
+  if (bufferIndex > 0) {
+    SendMessage(msgBuffer, bufferIndex, true);
+  }
+  // Clean up memory
+  delete[] msgBuffer;
 }
 
 
