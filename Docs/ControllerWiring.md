@@ -9,8 +9,8 @@ The GND and VCC are linked, purpose is likely to reduce cable resistance.
 | Pin | Wire Colour | Function |
 |-----|-------------|----------|
 | 1   | Blue        | VCC      |
-| 2   | Yellow      | RS485    |
-| 3   | Green       | RS485    |
+| 2   | Yellow      | RS485-B  |
+| 3   | Green       | RS485-A  |
 | 4   | Red         | Ground   |
 | 5   | Black       | VCC      |
 | 6   | White       | Ground   |
