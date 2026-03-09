@@ -96,10 +96,13 @@ uint8_t eb1006ae002a[] = { 0xEB, 0x10, 0x06, 0xAE, 0x00, 0x2A, 0x36, 0x75 };
 uint8_t eb1006d80019[] = { 0xEB, 0x10, 0x06, 0xD8, 0x00, 0x19, 0x97, 0xBA };
 uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  //Info from CP1 to IOT for On/Off State.
 uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  //Main info update from CP1 to IOT module.
-uint8_t eb1008e60032_request[109];
+uint8_t eb1008e60034[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x34, 0x34, 0x83 }; //Same as above, for older version control panel.
+
+#define eb1008e600_size 113
+uint8_t eb1008e600_request[eb1008e600_size];
 
 String jsonstring;
-StaticJsonDocument<4096> hvacJson;
+JsonDocument hvacJson;
 
 
 #if defined(ARDUINO) && defined(__AVR__)
@@ -188,7 +191,7 @@ void setup() {
   msgSemaphore = xSemaphoreCreateMutex();
 
   //Prefill messages used for webserver.
-  memset(eb1008e60032_request, 0, 109);
+  memset(eb1008e600_request, 0, eb1008e600_size);
 
   //Start Modbus Proxy
   xTaskCreatePinnedToCore(ModbusRelayLoop, "ModbusRelayLoop", 16384, NULL, 1, NULL, 1);
@@ -273,18 +276,19 @@ void webRootResponse() {
   hvacJson["panel_command_count"] = CommandInfo;
   hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
 
-  char eb1008char[109 * 4];
+  //Main Information Modbus message for system status.
+  char eb1008char[eb1008e600_size * 4];
   eb1008char[0] = '\0';  // Initialize the string as empty
-  for (size_t i = 0; i < 109; i++) {
+  for (size_t i = 0; i < eb1008e600_size; i++) {
     char buffer[4];
-    sprintf(buffer, "%u", eb1008e60032_request[i]);
+    sprintf(buffer, "%u", eb1008e600_request[i]);
     strcat(eb1008char, buffer);
-    if (i < 109 - 1) {
+    if (i < eb1008e600_size - 1) {
       strcat(eb1008char, ",");
     }
   }
-  hvacJson["eb1008e60032_cp1data"] = eb1008char;
-
+  hvacJson["eb1008e600_cp1data"] = eb1008char;
+  
 
   unlockVariable();
 
@@ -706,12 +710,12 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     }
 
     return;
-  } else if (checkPatternConfirm(msgBuffer, eb1008e60032)) {
+  } else if (checkPatternConfirm(msgBuffer, eb1008e60032) || checkPatternConfirm(msgBuffer, eb1008e60034)) {
 
     lockVariable();  //Lock state, variables used by webserver request.
 
-    if (msgLength == 109) {
-      memcpy(eb1008e60032_request, msgBuffer, 109);
+    if (msgLength == 109 || msgLength == 113) {
+      memcpy(eb1008e600_request, msgBuffer, msgLength);
     }
 
     // (msgBuffer[13] >> 4); //Other nibble of Evap Unit info, unsure of usage.
@@ -753,6 +757,8 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
   }
 }
 
+
+//Check pattern and send confirmation message in response.
 bool checkPatternConfirm(uint8_t* msgBuffer, uint8_t* checkpattern) {
   //6 Data Bytes.
   for (int i = 0; i < 6; i++) {
@@ -766,7 +772,7 @@ bool checkPatternConfirm(uint8_t* msgBuffer, uint8_t* checkpattern) {
   return true;
 }
 
-
+//Check pattern - this function does not send a response.
 bool checkPattern(uint8_t* msgBuffer, uint8_t* checkpattern, int checklength) {
   for (int i = 0; i < checklength; i++) {
     if (msgBuffer[i] != checkpattern[i]) {

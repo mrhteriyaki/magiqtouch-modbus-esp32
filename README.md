@@ -15,14 +15,13 @@ It provides local access and control with a simple [REST API](Docs/Api.md).
 ### Configuration Steps:
 - Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)
 - Download the folder from this repository ArduinoControlLAN-AirconControl  
-(For wired ethernet esp32 boards use ArduinoControlLAN-AirconControlEthernet)
 - Under Tools, Board manager install the package "esp32 by Espressif Systems"  
-- Set your WiFi Network name and password you want the device to connect with in the NetworkSettings.h file. (Not required for Wired Ethernet boards)
-- Set the board type in Tools -> Board -> esp32 -> Board Type   
-eg: FireBeetle-ESP32 for the DF Robot Firebeetle or ESP32 Dev Module for most generic boards
+- Set your WiFi Network name and password you want the device to connect with in the NetworkSettings.h file.
+(If using wired ethernet esp32 boards set USING_WIRED_ETHERNET to 1 in NetworkSettings.h, WiFi settings are optional for ethernet modules)
+- Set the board type in Tools -> Board -> esp32 -> Board Type. Typical ESP Modules use ESP32 Dev Module
 - Upload the code to the ESP32 (Sketch -> Upload).
-- Reset the device once complete and check serial output for the IP address assigned by the DHCP Server for successful link.  
- Ideally reserve this DHCP Lease on your router / DHCP Server so the IP does not change.
+- Restart the device once complete and check serial output for the IP address assigned by the DHCP Server for successful link.  
+ (Ideally reserve this DHCP Lease on your router / DHCP Server so the IP does not change.)
 - Browse to the IP in your browser and confirm a JSON formatted response is displayed similar to [this example](Docs/Api.md).
 - Wire the hardware as per diagram below (Note Ethernet boards use alternate pins)  
 
