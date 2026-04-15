@@ -1,21 +1,24 @@
-//ESP32 Aircon Interface
-//Board Library esp32 by Espressif Systems in use.
+// ESP32 Aircon Interface
+// Board Library esp32 by Espressif Systems in use.
 
-//Libraries.
+// Libraries.
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
 #include <HardwareSerial.h>
+#include <WiFi.h>
+
 
 #include "NetworkSettings.h"
 #include "PinSettings.h"
 
-//Max message size for modbus, reduce due to ram usage.
+// Max message size for modbus, reduce due to ram usage.
 #define MAXMSGSIZE 256
 #define MAXSLAVEID 30
 #define GAPTHRESHOLD 50
 
 WebServer server(80);
+
 
 HardwareSerial SerialA(1);
 HardwareSerial SerialB(2);
@@ -34,7 +37,7 @@ bool SerialOutputModbus = false;
 
 bool MonitorMode = false;
 
-//Aircon Control Variables.
+// Aircon Control Variables.
 bool SystemPower = false;
 uint8_t FanSpeed = 1;
 uint8_t SystemMode = 0;
@@ -43,8 +46,8 @@ uint8_t TargetTemp2 = 20;
 bool HeaterZone1 = false;
 bool HeaterZone2 = false;
 
-//Aircon Info Variables.
-uint16_t CommandInfo = 0x0;  //Increments on command change from Control Panel.
+// Aircon Info Variables.
+uint16_t CommandInfo = 0x0;  // Increments on command change from Control Panel.
 uint8_t SystemPowerInfo = 0x0;
 uint8_t EvapModeInfo = 0x0;
 uint8_t EvapFanSpeedInfo = 0x0;
@@ -62,31 +65,31 @@ uint8_t AutomaticCleanRunning = 0x0;
 
 bool sendCommand = false;
 uint8_t IOTModuleCommandRequest[] = { 0xEB, 0x03, 0x0B, 0x0C, 0x00, 0x0D, 0x50, 0xE2 };
-uint8_t x2vl = 0x9F;  //Increases for each command sent.
-uint8_t x3vl = 0x21;  //WiFi DB Signal
-uint8_t x4vl = 0x11;  //System Off 10 = On, 11 = Off.
-uint8_t x5vl = 0x42;  //Cooler Mode 42 = Off, 02 = On
-uint8_t x6vl = 0x43;  //Evap Fan setting.
-uint8_t x7vl = 0x04;  //Unknown
-uint8_t x8vl = 0x22;  //Heater Fan Settings.
+uint8_t x2vl = 0x9F;  // Increases for each command sent.
+uint8_t x3vl = 0x21;  // WiFi DB Signal
+uint8_t x4vl = 0x11;  // System Off 10 = On, 11 = Off.
+uint8_t x5vl = 0x42;  // Cooler Mode 42 = Off, 02 = On
+uint8_t x6vl = 0x43;  // Evap Fan setting.
+uint8_t x7vl = 0x04;  // Unknown
+uint8_t x8vl = 0x22;  // Heater Fan Settings.
 
 uint8_t x10v = 0x24;
 uint8_t x12v = 0x24;
-uint8_t x14v = 0x00;  //zone control.
+uint8_t x14v = 0x00;  // zone control.
 
-uint8_t x17v = 0x14;  //Zone 2 Temp - Default 20C
-uint8_t x18v = 0x14;  //Zone 1 Temp
+uint8_t x17v = 0x14;  // Zone 2 Temp - Default 20C
+uint8_t x18v = 0x14;  // Zone 1 Temp
 
-//Request for IOT Module info - Sends MAC address.
+// Request for IOT Module info - Sends MAC address.
 uint8_t IOTModuleInfoRequest[] = { 0xEB, 0x03, 0x03, 0xE4, 0x00, 0x05, 0xD3, 0x70 };
-uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B, 0xA8, 0x11 };  //15 bytes length
+uint8_t IOTModuleInfoResponse[] = { 0xEB, 0x03, 0x0A, 0x01, 0x09, 0x01, 0x09, 0x70, 0x90, 0x2C, 0x65, 0x27, 0x0B };  // 13 bytes length, does not include CRC (0xA8, 0x11)
 
-//0xEB, 0x03, 0x0A, Version, MAC ADDRESS, 0xA8, 0x11
-//Version is 0x01, 0x09, 0x01, 0x09
-//MAC Address = 90:70:65:2C:0B:27
+// 0xEB, 0x03, 0x0A, Version, MAC ADDRESS, 0xA8, 0x11
+// Version is 0x01, 0x09, 0x01, 0x09
+// MAC Address = 90:70:65:2C:0B:27
 
-//Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
-uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  //CRC included.
+// Recurring responses that match the start of the request sent from CP1 - Function 10 Response.
+uint8_t eb1005d80023[] = { 0xEB, 0x10, 0x05, 0xD8, 0x00, 0x23, 0x17, 0xED };  // CRC included.
 uint8_t eb1005fb0021[] = { 0xEB, 0x10, 0x05, 0xFB, 0x00, 0x21, 0x67, 0xE6 };
 uint8_t eb10061c002c[] = { 0xEB, 0x10, 0x06, 0x1C, 0x00, 0x2C, 0x16, 0x50 };
 uint8_t eb1006480004[] = { 0xEB, 0x10, 0x06, 0x48, 0x00, 0x04, 0x57, 0x9E };
@@ -94,16 +97,15 @@ uint8_t eb10064C0038[] = { 0xEB, 0x10, 0x06, 0x4C, 0x00, 0x38, 0x16, 0x4E };
 uint8_t eb100684002a[] = { 0xEB, 0x10, 0x06, 0x84, 0x00, 0x2A, 0x17, 0xBD };
 uint8_t eb1006ae002a[] = { 0xEB, 0x10, 0x06, 0xAE, 0x00, 0x2A, 0x36, 0x75 };
 uint8_t eb1006d80019[] = { 0xEB, 0x10, 0x06, 0xD8, 0x00, 0x19, 0x97, 0xBA };
-uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  //Info from CP1 to IOT for On/Off State.
-uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  //Main info update from CP1 to IOT module.
-uint8_t eb1008e60034[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x34, 0x34, 0x83 }; //Same as above, for older version control panel.
+uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  // Info from CP1 to IOT for On/Off State.
+uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  // Main info update from CP1 to IOT module.
+uint8_t eb1008e60034[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x34, 0x34, 0x83 };  // Same as above, for older version control panel.
 
 #define eb1008e600_size 113
 uint8_t eb1008e600_request[eb1008e600_size];
 
 String jsonstring;
 JsonDocument hvacJson;
-
 
 #if defined(ARDUINO) && defined(__AVR__)
 static PROGMEM const uint8_t table_crc_hi[] = {
@@ -172,7 +174,6 @@ static const uint8_t table_crc_lo[] = {
   0x43, 0x83, 0x41, 0x81, 0x80, 0x40
 };
 
-
 void lockVariable() {
   xSemaphoreTake(msgSemaphore, portMAX_DELAY);
 }
@@ -184,31 +185,51 @@ void unlockVariable() {
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
-  //Set Serial, Baud Rate, 8 bit no parity, RX,TX
+  // Set Serial, Baud Rate, 8 bit no parity, RX,TX
   SerialA.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);
   SerialB.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);
 
   msgSemaphore = xSemaphoreCreateMutex();
 
-  //Prefill messages used for webserver.
+  // Prefill messages used for webserver.
   memset(eb1008e600_request, 0, eb1008e600_size);
 
-  //Start Modbus Proxy
+  // Start Modbus Proxy
   xTaskCreatePinnedToCore(ModbusRelayLoop, "ModbusRelayLoop", 16384, NULL, 1, NULL, 1);
 
   LanController::Setup();
 
+  //MAC address reporting to panel.
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  IOTModuleInfoResponse[7] = mac[1];
+  IOTModuleInfoResponse[8] = mac[0];
+  IOTModuleInfoResponse[9] = mac[3];
+  IOTModuleInfoResponse[10] = mac[2];
+  IOTModuleInfoResponse[11] = mac[5];
+  IOTModuleInfoResponse[12] = mac[4];
+
   xTaskCreate(WebServerTask, "WebServerTask", 16384, NULL, 1, NULL);
 }
-
 
 void loop() {
   vTaskDelay(100);
 }
 
-void WebServerTask(void* parameter) {
+void WebServerTask(void *parameter) {
   server.on("/", HTTP_GET, webRootResponse);
+  server.on("/raw", HTTP_GET, webDebugResponse);
   server.on("/command", HTTP_POST, webCommandResponse);
+  server.on("/network", HTTP_GET, NetworkInfoResponse);
+
+  //WiFi Setup.
+  server.on("/wifi", HTTP_GET, wifiSetupResponse);
+  server.on("/wifiupdate", HTTP_POST, wifiUpdate);
+  server.on("/clearsavedwifi", HTTP_GET, wifiClearSaved);
+
+  //Management.
+  server.on("/restart", HTTP_GET, restartDevice);
+
   server.begin();
 
   while (true) {
@@ -217,15 +238,14 @@ void WebServerTask(void* parameter) {
   }
 }
 
-
-void ModbusRelayLoop(void* parameter) {
+void ModbusRelayLoop(void *parameter) {
   while (true) {
     relaySerial(SerialA, SerialB, SerialAbuffer, SerialAIndex, s1previousMillis, 1);
     relaySerial(SerialB, SerialA, SerialBbuffer, SerialBIndex, s2previousMillis, 2);
   }
 }
 
-void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint8_t* buffer, int& index, unsigned long& previousMillis, int serialPort) {
+void relaySerial(HardwareSerial &inputSerial, HardwareSerial &outputSerial, uint8_t *buffer, int &index, unsigned long &previousMillis, int serialPort) {
   while (inputSerial.available()) {
     uint8_t incomingByte = inputSerial.read();
     outputSerial.write(incomingByte);
@@ -235,7 +255,7 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
     if (index > 0 && currentMillis - previousMillis > GAPTHRESHOLD) {
       index = 0;
     }
-    previousMillis = currentMillis;  //Save current time byte is received.
+    previousMillis = currentMillis;  // Save current time byte is received.
 
     if (index == MAXMSGSIZE) {
       if (SerialOutputModbus) {
@@ -244,7 +264,7 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
       index = 0;
     }
 
-    //Save byte to buffer and process message.
+    // Save byte to buffer and process message.
     buffer[index++] = incomingByte;
     if (ProcessMessage(buffer, index, serialPort)) {
       index = 0;
@@ -252,13 +272,11 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
   }
 }
 
-
-
 void webRootResponse() {
   lockVariable();
 
   hvacJson.clear();
-  hvacJson["module_name"] = "ESP32-HVAC-Control";
+  hvacJson["module_name"] = LanController::NET_HOSTNAME;
   hvacJson["uptime"] = getUptimeFormatted();
   hvacJson["system_power"] = SystemPowerInfo;
   hvacJson["system_mode"] = SystemMode;
@@ -276,7 +294,17 @@ void webRootResponse() {
   hvacJson["panel_command_count"] = CommandInfo;
   hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
 
-  //Main Information Modbus message for system status.
+  unlockVariable();
+
+  serializeJsonPretty(hvacJson, jsonstring);
+  server.send(200, "application/json", jsonstring);
+}
+
+void webDebugResponse() {
+  lockVariable();
+  hvacJson.clear();
+
+  // Main Information Modbus message for system status.
   char eb1008char[eb1008e600_size * 4];
   eb1008char[0] = '\0';  // Initialize the string as empty
   for (size_t i = 0; i < eb1008e600_size; i++) {
@@ -287,8 +315,8 @@ void webRootResponse() {
       strcat(eb1008char, ",");
     }
   }
+
   hvacJson["eb1008e600_cp1data"] = eb1008char;
-  
 
   unlockVariable();
 
@@ -296,6 +324,19 @@ void webRootResponse() {
   server.send(200, "application/json", jsonstring);
 }
 
+void NetworkInfoResponse() {
+  int signal_val = WiFi.RSSI();
+  lockVariable();
+  hvacJson.clear();
+  hvacJson["WIFI_IP"] = WiFi.localIP().toString();
+  hvacJson["WIFI_dBm"] = signal_val;
+  hvacJson["WIFI_MAC"] = WiFi.macAddress();
+  
+  unlockVariable();
+
+  serializeJsonPretty(hvacJson, jsonstring);
+  server.send(200, "application/json", jsonstring);
+}
 
 void webCommandResponse() {
   if (server.hasArg("plain")) {         // Check if the body exists
@@ -314,13 +355,11 @@ void webCommandResponse() {
       if (SerialOutputModbus) {
         Serial.println("System Power set to false");
       }
-
     } else if (body.indexOf("zone1=on") != -1) {
       HeaterZone1 = true;
       if (SerialOutputModbus) {
         Serial.println("Enabled Zone 1");
       }
-
     } else if (body.indexOf("zone1=off") != -1) {
       HeaterZone1 = false;
       if (SerialOutputModbus) {
@@ -336,7 +375,6 @@ void webCommandResponse() {
       if (SerialOutputModbus) {
         Serial.println("Disabled Zone 2");
       }
-
     } else if (body.indexOf("serial=on") != -1) {
       SerialOutputModbus = true;
       Serial.println("Serial Output Enabled");
@@ -351,7 +389,6 @@ void webCommandResponse() {
       Serial.println("Monitor Mode Off");
     } else if (body.startsWith("send=")) {
       SendMessageString(body.substring(5));
-
     } else if (body.startsWith("fanspeed=")) {
       int number = body.substring(9).toInt();
       if (number >= 1 && number <= 10) {
@@ -360,7 +397,6 @@ void webCommandResponse() {
       if (SerialOutputModbus) {
         Serial.println("Fan speed set to " + String(FanSpeed));
       }
-
     } else if (body.startsWith("mode=")) {
       int number = body.substring(5).toInt();
       if (number >= 0 && number <= 5) {
@@ -386,7 +422,7 @@ void webCommandResponse() {
         Serial.println("Target Temp set to " + String(TargetTemp2));
       }
     }
-    sendCommand = true;  //Force command update
+    sendCommand = true;  // Force command update
     unlockVariable();
 
     server.send(200, "text/plain", "OK");
@@ -399,10 +435,10 @@ void webCommandResponse() {
 }
 
 bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
-  if (msgLength < 4) {  //Skip messages below min length.
+  if (msgLength < 4) {  // Skip messages below min length.
     return false;
   }
-  //CRC Message Validation
+  // CRC Message Validation
   uint16_t crcraw = (msgBuffer[msgLength - 2] << 8 | msgBuffer[msgLength - 1]);
   uint16_t expectedcrc = modbusCRC(msgBuffer, msgLength - 2);
   if (crcraw == expectedcrc) {
@@ -410,44 +446,42 @@ bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
       SerialPrintMessage(msgBuffer, msgLength, SerialID);
     }
 
-    //Seperate Processing functions for each message source/destination.
+    // Seperate Processing functions for each message source/destination.
 
-    IoTModuleMessageProcess(msgBuffer, msgLength);  //IOT Module
-    //EvapInfoUpdate(msgBuffer, msgLength); //Evap Unit
-    //HeaterInfoUpdate(msgBuffer, msgLength); //Heater Unit
-    //Panel1Info(msgBuffer, msgLength); //Control Panel 1
-    Panel2Info(msgBuffer, msgLength);  //Control Panel 2.
+    IoTModuleMessageProcess(msgBuffer, msgLength);  // IOT Module
+    // EvapInfoUpdate(msgBuffer, msgLength); //Evap Unit
+    // HeaterInfoUpdate(msgBuffer, msgLength); //Heater Unit
+    // Panel1Info(msgBuffer, msgLength); //Control Panel 1
+    Panel2Info(msgBuffer, msgLength);  // Control Panel 2.
 
     return true;
   }
   return false;
 }
 
-
-void EvapInfoUpdate(uint8_t* msgBuffer, int msgLength) {
+void EvapInfoUpdate(uint8_t *msgBuffer, int msgLength) {
   uint8_t evapInfoResponse[] = { 0x02, 0x03, 0x40 };
   if (checkPattern(msgBuffer, evapInfoResponse, 3)) {
-    //Aircon unit info - Pump State, Active fan mode?
+    // Aircon unit info - Pump State, Active fan mode?
   }
 }
 
-void HeaterInfoUpdate(uint8_t* msgBuffer, int msgLength) {
-  //Active Fan speed?
+void HeaterInfoUpdate(uint8_t *msgBuffer, int msgLength) {
+  // Active Fan speed?
 }
 
-
-void Panel1Info(uint8_t* msgBuffer, int msgLength) {
-  //On/Off.
-  //Zone1 On/Off.
-  //Temp Sensor
+void Panel1Info(uint8_t *msgBuffer, int msgLength) {
+  // On/Off.
+  // Zone1 On/Off.
+  // Temp Sensor
 }
 
-void Panel2Info(uint8_t* msgBuffer, int msgLength) {
+void Panel2Info(uint8_t *msgBuffer, int msgLength) {
   if (msgLength != 7) {
     return;
   }
 
-  //Temp Sensor
+  // Temp Sensor
   uint8_t panelInfoResponse[] = { 0x97, 0x03, 0x02 };
   if (checkPattern(msgBuffer, panelInfoResponse, 3)) {
     lockVariable();
@@ -456,7 +490,7 @@ void Panel2Info(uint8_t* msgBuffer, int msgLength) {
   }
 }
 
-void SerialPrintMessage(uint8_t* msgBuffer, int msgLength, int SerialID) {
+void SerialPrintMessage(uint8_t *msgBuffer, int msgLength, int SerialID) {
   Serial.print("S");
   Serial.print(SerialID);
   Serial.print(" ");
@@ -470,7 +504,7 @@ void SerialPrintMessage(uint8_t* msgBuffer, int msgLength, int SerialID) {
   Serial.println();
 }
 
-static uint16_t modbusCRC(uint8_t* buffer, uint16_t buffer_length) {
+static uint16_t modbusCRC(uint8_t *buffer, uint16_t buffer_length) {
   uint8_t crc_hi = 0xFF; /* high CRC byte initialized */
   uint8_t crc_lo = 0xFF; /* low CRC byte initialized */
   unsigned int i;        /* will index into CRC lookup */
@@ -487,10 +521,13 @@ static uint16_t modbusCRC(uint8_t* buffer, uint16_t buffer_length) {
   return (crc_hi << 8 | crc_lo);
 }
 
-
 uint8_t IOTModuleStatusRequest[] = { 0xEB, 0x03, 0x02, 0x58, 0x00, 0x12, 0x53, 0x66 };
 void SendIOTModuleStatus() {
-  uint8_t wifi = 0x00;  //WiFI Connected 00, Disconnected = 21
+  uint8_t wifi = 0x21;  // WiFI Connected 00, Disconnected = 21
+  if (WiFi.status() == WL_CONNECTED) {
+    wifi = 0x0;
+  }
+
   uint8_t IOTModuleStatusResponse[] = { 0xEB,
                                         0x03, 0x24, 0x00, wifi, 0x52, 0x4D, 0x32, 0x48,
                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -502,7 +539,6 @@ void SendIOTModuleStatus() {
   }
 }
 
-
 void UpdateCommandMessage() {
   if (x4vl == 0x11 && SystemPower == true) {
     x4vl = 0x10;
@@ -510,7 +546,6 @@ void UpdateCommandMessage() {
     if (SerialOutputModbus) {
       Serial.println("System Power turned on.");
     }
-
   } else if (x4vl == 0x10 && SystemPower == false) {
     x4vl = 0x11;
     sendCommand = true;
@@ -522,28 +557,25 @@ void UpdateCommandMessage() {
   uint8_t tmpCfanspeed = 0x41 + (FanSpeed * 2);
   uint8_t tmpHfanspeed = 0x21 + (FanSpeed * 2);
 
-
-  if (SystemMode == 0)  //External Fan Mode.
+  if (SystemMode == 0)  // External Fan Mode.
   {
     SetXVal(&x5vl, 0x42);
     SetXVal(&x6vl, tmpCfanspeed);
     SetXVal(&x7vl, 0x04);
     SetXVal(&x8vl, 0x22);
-
-  } else if (SystemMode == 1)  //Recycle Fan Mode
+  } else if (SystemMode == 1)  // Recycle Fan Mode
   {
     SetXVal(&x5vl, 0x02);
     SetXVal(&x6vl, tmpCfanspeed - 1);
     SetXVal(&x7vl, 0x04);
     SetXVal(&x8vl, tmpHfanspeed);
-
-  } else if (SystemMode == 2)  //Cooler Mode Manual
+  } else if (SystemMode == 2)  // Cooler Mode Manual
   {
     SetXVal(&x5vl, 0x02);
     SetXVal(&x6vl, tmpCfanspeed);
     SetXVal(&x7vl, 0x04);
     SetXVal(&x8vl, 0x02);
-  } else if (SystemMode == 3)  //Cooler Mode Auto (Temp) - not tested.
+  } else if (SystemMode == 3)  // Cooler Mode Auto (Temp) - not tested.
   {
     uint16_t tempVal = 0x2003 + (TargetTemp * 0x20);
     uint8_t highByte = (tempVal >> 8) & 0xFF;
@@ -553,7 +585,7 @@ void UpdateCommandMessage() {
     SetXVal(&x6vl, lowByte);
 
     SetXVal(&x7vl, 0x04);
-    SetXVal(&x8vl, 0x02);  //Disable heater.
+    SetXVal(&x8vl, 0x02);  // Disable heater.
 
     uint8_t zonetemp = 0x2 * TargetTemp;
     SetXVal(&x10v, zonetemp);
@@ -561,21 +593,20 @@ void UpdateCommandMessage() {
 
     SetXVal(&x17v, 0);
     SetXVal(&x18v, TargetTemp);
-
-  } else if (SystemMode == 4)  //Heater Mode
+  } else if (SystemMode == 4)  // Heater Mode
   {
-    //Unsure if need to set cooler settings.
-    //SetXVal(&x5vl, 0x02);
-    //SetXVal(&x6vl, 0x42);
+    // Unsure if need to set cooler settings.
+    // SetXVal(&x5vl, 0x02);
+    // SetXVal(&x6vl, 0x42);
 
-    //Heater setting
+    // Heater setting
     uint16_t tempVal = 0x02C3 + (0x40 * TargetTemp);
     uint8_t highByte = (tempVal >> 8) & 0xFF;
     uint8_t lowByte = tempVal & 0xFF;
     SetXVal(&x7vl, highByte);
     SetXVal(&x8vl, lowByte);
 
-    //delayed update occurs on IOT module.
+    // delayed update occurs on IOT module.
     uint8_t zonetemp = 0x2 * TargetTemp;
     SetXVal(&x10v, zonetemp);
     SetXVal(&x12v, zonetemp);
@@ -596,7 +627,9 @@ void UpdateCommandMessage() {
 
 void SendCommandMessage() {
 
+  lockVariable();
   UpdateCommandMessage();
+  unlockVariable();
 
   if (sendCommand) {
     if (SerialOutputModbus) {
@@ -611,27 +644,31 @@ void SendCommandMessage() {
     sendCommand = false;
   }
 
+  // Wireless Signal Strength.
+  if (WiFi.status() == WL_CONNECTED) {
+    x3vl = (uint8_t)(-WiFi.RSSI());
+  }
+
   uint8_t IOTCommandMessage[] = {
     0xEB, 0x03, 0x1A, 0x02, x2vl, x3vl, x4vl, x5vl,
     x6vl, x7vl, x8vl, 0x00, x10v, 0x00, x12v, 0x00,
     x14v, 0x00, 0x00, x17v, x18v, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00
-  };  //length is 29
+  };  // length is 29
   if (!MonitorMode) {
     SendMessage(IOTCommandMessage, 29, true);
   }
 }
 
-void SetXVal(uint8_t* val, uint8_t newVal) {
+void SetXVal(uint8_t *val, uint8_t newVal) {
   if (*val != newVal) {
     *val = newVal;
     sendCommand = true;
   }
 }
 
-
 void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
-  if (msgLength < 8)  //Skip messages below required size for these functions..
+  if (msgLength < 8)  // Skip messages below required size for these functions..
   {
     return;
   }
@@ -653,12 +690,12 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
   } else if (checkPatternConfirm(msgBuffer, eb1006d80019)) {
     return;
   } else if (checkPatternConfirm(msgBuffer, eb1008e50001)) {
-    //Get System Power State.
+    // Get System Power State.
     uint16_t powermsgval = (msgBuffer[7] << 8 | msgBuffer[8]);
-    SystemPowerInfo = powermsgval & 1;  //LSB = Power on state.
-    powermsgval = powermsgval >> 4;     //Bitshift to the right for +1 per command update.
+    SystemPowerInfo = powermsgval & 1;  // LSB = Power on state.
+    powermsgval = powermsgval >> 4;     // Bitshift to the right for +1 per command update.
 
-    //Check for Changes from panel.
+    // Check for Changes from panel.
     if (powermsgval != CommandInfo) {
 
       if (SerialOutputModbus) {
@@ -672,47 +709,47 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
       TargetTemp = TargetTempInfo;
       TargetTemp2 = TargetTemp2Info;
 
-      //System Mode.
-      uint8_t evapmodetemp = EvapModeInfo & 0x0F;  //mask higher bits.
+      // System Mode.
+      uint8_t evapmodetemp = EvapModeInfo & 0x0F;  // mask higher bits.
       if (evapmodetemp == 0x01) {
-        //Cooler Mode - Off
+        // Cooler Mode - Off
         SystemMode = 2;
       } else if (evapmodetemp == 0x05) {
-        //Cooler Mode - Manual
+        // Cooler Mode - Manual
         SystemMode = 2;
       } else if (evapmodetemp == 0x07) {
-        //Cooler Mode - Auto
+        // Cooler Mode - Auto
         SystemMode = 3;
       } else if (evapmodetemp == 0x09) {
-        //Fan - External
+        // Fan - External
         SystemMode = 0;
       } else if (HeaterModeInfo == 0x01) {
-        //Heater
+        // Heater
         SystemMode = 4;
       } else if (HeaterModeInfo == 0x03) {
-        //Fan - Recycle
+        // Fan - Recycle
         SystemMode = 1;
       }
 
-      //Only update FanSpeed when using Fan Modes or Cooler Manual Mode.
+      // Only update FanSpeed when using Fan Modes or Cooler Manual Mode.
       if (HeaterFanSpeedInfo > 0 && SystemMode == 1) {
         FanSpeed = HeaterFanSpeedInfo;
       } else if (SystemMode == 0 || SystemMode == 2) {
         FanSpeed = EvapFanSpeedInfo;
       }
 
+      // Update local variables for command message and disable send trigger.
+      UpdateCommandMessage();
+
+      sendCommand = false;
 
       unlockVariable();
-
-      //Update local variables for command message and disable send trigger.
-      UpdateCommandMessage();
-      sendCommand = false;
     }
 
     return;
   } else if (checkPatternConfirm(msgBuffer, eb1008e60032) || checkPatternConfirm(msgBuffer, eb1008e60034)) {
 
-    lockVariable();  //Lock state, variables used by webserver request.
+    lockVariable();  // Lock state, variables used by webserver request.
 
     if (msgLength == 109 || msgLength == 113) {
       memcpy(eb1008e600_request, msgBuffer, msgLength);
@@ -721,26 +758,26 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     // (msgBuffer[13] >> 4); //Other nibble of Evap Unit info, unsure of usage.
     AutomaticCleanRunning = msgBuffer[11];
     EvapModeInfo = msgBuffer[12];
-    EvapFanSpeedInfo = (msgBuffer[14] & 0x0F);  //mask higher nibble.
+    EvapFanSpeedInfo = (msgBuffer[14] & 0x0F);  // mask higher nibble.
     HeaterModeInfo = msgBuffer[40];
     HeaterFanSpeedInfo = (msgBuffer[42] & 0x0F);
-    TargetTempInfo = msgBuffer[44];  //Evap,Heater Temp Target
+    TargetTempInfo = msgBuffer[44];  // Evap,Heater Temp Target
     TargetTemp2Info = msgBuffer[90];
     ThermisterTempInfo = msgBuffer[46];
-    Zone1EnabledInfo = msgBuffer[80] & 1;         //Zone 1 Enabled (LSB)
-    Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1;  //Zone 2 Enabled (2nd LSB)
-    //Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
+    Zone1EnabledInfo = msgBuffer[80] & 1;         // Zone 1 Enabled (LSB)
+    Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1;  // Zone 2 Enabled (2nd LSB)
+    // Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
 
     unlockVariable();
-    //Zone2 captured from CP2 reports.
+    // Zone2 captured from CP2 reports.
     return;
   }
 
-  //Match initial request with CRC - 8 Bytes.
+  // Match initial request with CRC - 8 Bytes.
   if (checkPattern(msgBuffer, IOTModuleInfoRequest, 8)) {
     if (!MonitorMode) {
-      SendMessage(IOTModuleInfoResponse, 15, false);
+      SendMessage(IOTModuleInfoResponse, 13, true);
     }
 
     return;
@@ -757,10 +794,9 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
   }
 }
 
-
-//Check pattern and send confirmation message in response.
-bool checkPatternConfirm(uint8_t* msgBuffer, uint8_t* checkpattern) {
-  //6 Data Bytes.
+// Check pattern and send confirmation message in response.
+bool checkPatternConfirm(uint8_t *msgBuffer, uint8_t *checkpattern) {
+  // 6 Data Bytes.
   for (int i = 0; i < 6; i++) {
     if (msgBuffer[i] != checkpattern[i]) {
       return false;
@@ -772,8 +808,8 @@ bool checkPatternConfirm(uint8_t* msgBuffer, uint8_t* checkpattern) {
   return true;
 }
 
-//Check pattern - this function does not send a response.
-bool checkPattern(uint8_t* msgBuffer, uint8_t* checkpattern, int checklength) {
+// Check pattern - this function does not send a response.
+bool checkPattern(uint8_t *msgBuffer, uint8_t *checkpattern, int checklength) {
   for (int i = 0; i < checklength; i++) {
     if (msgBuffer[i] != checkpattern[i]) {
       return false;
@@ -782,7 +818,7 @@ bool checkPattern(uint8_t* msgBuffer, uint8_t* checkpattern, int checklength) {
   return true;
 }
 
-void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
+void SendMessage(uint8_t *msgBuffer, int length, bool sendcrc) {
 
   for (uint8_t i = 0; i < length; i++) {
     SerialA.write(msgBuffer[i]);
@@ -803,7 +839,7 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
   if (SerialOutputModbus) {
     if (sendcrc) {
       // Create temporary buffer with CRC included
-      uint8_t tempBuffer[length + 2];
+      uint8_t tempBuffer[MAXMSGSIZE + 2];
       memcpy(tempBuffer, msgBuffer, length);
       tempBuffer[length] = highByte;
       tempBuffer[length + 1] = lowByte;
@@ -824,9 +860,12 @@ void SendMessageString(String hexString) {
     }
   }
   int hexPairs = (hexDigits + 1) / 2;
+  if (hexPairs > MAXMSGSIZE) {
+    hexPairs = MAXMSGSIZE;
+  }
 
   // Create buffer for the message
-  uint8_t* msgBuffer = new uint8_t[hexPairs];
+  uint8_t msgBuffer[MAXMSGSIZE];
   int bufferIndex = 0;
   String hexByte = "";
 
@@ -852,10 +891,7 @@ void SendMessageString(String hexString) {
   if (bufferIndex > 0) {
     SendMessage(msgBuffer, bufferIndex, true);
   }
-  // Clean up memory
-  delete[] msgBuffer;
 }
-
 
 String getUptimeFormatted() {
   uint64_t totalSeconds = esp_timer_get_time() / 1000000ULL;
@@ -866,4 +902,221 @@ String getUptimeFormatted() {
   char buffer[50];
   snprintf(buffer, sizeof(buffer), "%ud %02u:%02u:%02u", days, hours, minutes, seconds);
   return String(buffer);
+}
+
+void wifiUpdate() {
+  String ssid = server.arg("ssid");
+  String passkey = server.arg("passkey");
+  server.send(200, "text/plain", "OK");
+  LanController::saveWiFiCredentials(ssid, passkey);
+}
+
+void wifiClearSaved() {
+  String empty_string = "";
+  server.send(200, "text/plain", "OK");
+  vTaskDelay(200);
+  WiFi.disconnect(false, true);
+  LanController::saveWiFiCredentials(empty_string, empty_string);
+}
+
+static const char WIFI_SETUP_HTML[] = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WiFi Setup</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #0a0e1a;
+      background-image:
+        linear-gradient(rgba(0,255,180,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,180,0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      font-family: 'Rajdhani', sans-serif;
+      color: #c8ffe8;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 400px;
+      margin: 1.5rem;
+      border: 1px solid rgba(0,255,160,0.25);
+      border-radius: 4px;
+      background: rgba(10,20,30,0.85);
+      box-shadow: 0 0 40px rgba(0,255,140,0.08), inset 0 0 60px rgba(0,0,0,0.4);
+      padding: 2.5rem 2rem;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: rgba(0,255,160,0.45);
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #eaffef;
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.72rem;
+      color: rgba(0,255,160,0.5);
+      letter-spacing: 0.12em;
+      margin-bottom: 2rem;
+    }
+
+    .field {
+      margin-bottom: 1.4rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(0,255,160,0.6);
+      margin-bottom: 0.5rem;
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      background: rgba(0,255,140,0.04);
+      border: 1px solid rgba(0,255,140,0.2);
+      border-radius: 3px;
+      color: #d6fff0;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus {
+      border-color: rgba(0,255,140,0.6);
+      box-shadow: 0 0 12px rgba(0,255,140,0.12);
+    }
+
+    input::placeholder { color: rgba(0,255,140,0.2); }
+
+    button {
+      width: 100%;
+      margin-top: 0.6rem;
+      padding: 0.8rem;
+      background: rgba(0,255,140,0.1);
+      border: 1px solid rgba(0,255,140,0.45);
+      border-radius: 3px;
+      color: #00ff99;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      background: rgba(0,255,140,0.18);
+      box-shadow: 0 0 20px rgba(0,255,140,0.15);
+    }
+
+    button:active { transform: scale(0.99); }
+
+    #status {
+      margin-top: 1.2rem;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: rgba(0,255,140,0.55);
+      min-height: 1.2em;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Magiq HVAC IOT</div>
+    <h1>WiFi Setup</h1>
+    <p class="subtitle">// configure network access</p>
+
+    <div class="field">
+      <label for="ssid">Network SSID</label>
+      <input type="text" id="ssid" name="ssid" placeholder="Enter network name" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="passkey">Passkey</label>
+      <input type="password" id="passkey" name="passkey" placeholder="Enter password" />
+    </div>
+
+    <button onclick="submitWifi()">Connect</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    async function submitWifi() {
+      const ssid    = document.getElementById('ssid').value.trim();
+      const passkey = document.getElementById('passkey').value;
+      const status  = document.getElementById('status');
+
+      if (!ssid) { status.textContent = '// SSID required'; return; }
+
+      status.textContent = '// sending credentials...';
+
+      const body = new URLSearchParams({ ssid, passkey });
+
+		try {
+        const res = await fetch('/wifiupdate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          status.style.color = '#ff6060';
+          status.textContent = '// error: ' + res.status;
+        }
+      } catch (e) {
+        status.style.color = '#ff6060';
+        status.textContent = '// request failed';
+      }
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
+void wifiSetupResponse() {
+  server.send(200, "text/html", WIFI_SETUP_HTML);
+}
+
+void restartDevice() {
+  server.send(200, "text/plain", "OK");
+  vTaskDelay(500);
+  ESP.restart();
 }

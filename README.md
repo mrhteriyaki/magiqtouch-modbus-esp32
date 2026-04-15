@@ -13,17 +13,23 @@ It provides local access and control with a simple [REST API](Docs/Api.md).
 ### API Documentation: [Link](Docs/Api.md)
 
 ### Configuration Steps:
-- Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)
-- Download the folder from this repository ArduinoControlLAN-AirconControl  
-- Under Tools, Board manager install the package "esp32 by Espressif Systems"  
-- Set your WiFi Network name and password you want the device to connect with in the NetworkSettings.h file.
-(If using wired ethernet esp32 boards set USING_WIRED_ETHERNET to 1 in NetworkSettings.h, WiFi settings are optional for ethernet modules)
-- Set the board type in Tools -> Board -> esp32 -> Board Type. Typical ESP Modules use ESP32 Dev Module
-- Upload the code to the ESP32 (Sketch -> Upload).
-- Restart the device once complete and check serial output for the IP address assigned by the DHCP Server for successful link.  
- (Ideally reserve this DHCP Lease on your router / DHCP Server so the IP does not change.)
-- Browse to the IP in your browser and confirm a JSON formatted response is displayed similar to [this example](Docs/Api.md).
-- Wire the hardware as per diagram below (Note Ethernet boards use alternate pins)  
+1. Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)
+2. Download the contents of the folder [ArduinoControlLAN-AirconControl].
+3. Open the file ArduinoControlLAN-AirconControl.ino the Arduino IDE should open.
+4. Under Tools, Board manager install the package "esp32 by Espressif Systems" 
+5. Select Tools > Port and select the port related to the ESP32 module.
+6. Click the Upload button (Right pointing Arrow).
+7. Once the upload is completed, restart the device to ensure it resets after the upload.
+8. The device will then broadcast a local WiFi network named 'ESP32-AIRCON', connect to it with passkey 'ExtraTasty123!'
+9. Browse to http://esp32-aircon.local/wifi (or http://192.168.4.1/wifi)  
+10. Enter in your normal WiFi network name/password and click save.  
+The device will then reboot and join the WiFi network with the provided details.  
+(If you enter in the incorrect wifi details, you will need to re-flash with the 'erase all flash' option enabled to clear the saved settings.)
+11. Confirm the device is accessible by browsing to http://esp32-aircon.local/  
+A JSON formatted response is displayed similar to [this example](Docs/Api.md).  
+
+Wiring diagram for the device:  
+(Note Ethernet boards use alternate pins)  
 
 ![diagram](Images/diagram.png)
 

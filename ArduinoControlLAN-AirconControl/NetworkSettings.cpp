@@ -1,18 +1,7 @@
 #include "NetworkSettings.h"
-#include <WiFi.h>
-#include <WiFiClient.h>
-#include <ArduinoOTA.h>
-#include <ESPmDNS.h>
-#include <ETH.h>
-
-#define ETH_PHY_TYPE ETH_PHY_LAN8720
-#define ETH_PHY_ADDR 0
-#define ETH_PHY_MDC 23
-#define ETH_PHY_MDIO 18
-#define ETH_PHY_POWER -1
-#define ETH_CLK_MODE ETH_CLOCK_GPIO0_IN
 
 bool mdns_started = false;
+Preferences LanController::prefs;
 
 void LanController::Setup() {
 
@@ -36,12 +25,35 @@ void LanController::Setup() {
   WiFi.setHostname(NET_HOSTNAME);
 #endif
 
-  WiFi.begin(WIFI_NETWORK_NAME, WIFI_NETWORK_KEY);
+  String ssid_load, passkey_load;
+  loadWiFiCredentials(ssid_load, passkey_load);
+  if (ssid_load.isEmpty() || passkey_load.isEmpty()) {
+    WiFi.softAP(NET_HOSTNAME, softAPpassword);
+  } else {
+    WiFi.begin(ssid_load, passkey_load);
+  }
 
   xTaskCreate(ReconnectLoop, "ReconnectLoop", 4096, NULL, 1, NULL);
   if (OTA_ENABLED) {
     xTaskCreate(OTATask, "OTATask", 4096, NULL, 1, NULL);
   }
+}
+
+void LanController::saveWiFiCredentials(String &ssid, String &passkey) {
+  prefs.begin("wifi", false);  // "wifi" = namespace, false = read/write
+  prefs.putString("wifi_ssid", ssid);
+  prefs.putString("wifi_key", passkey);
+  prefs.end();
+
+  //Restart device to use new details.
+  ESP.restart();
+}
+
+void LanController::loadWiFiCredentials(String &ssid, String &password) {
+  prefs.begin("wifi", true);  // true = read-only
+  ssid = prefs.getString("wifi_ssid", "");
+  password = prefs.getString("wifi_key", "");
+  prefs.end();
 }
 
 void LanController::ReconnectLoop(void* parameter) {
@@ -83,6 +95,7 @@ void LanController::NetworkConnectedEvent(arduino_event_id_t event) {
       Serial.println("IP address: ");
       Serial.println(WiFi.localIP());
       StartMDNS();
+      break;
   }
 }
 
