@@ -42,6 +42,8 @@ List of available commands, where x is the value.
 | temp=x| 0-28| Temperature Target for Cooler, Heater (Zone 1)
 | temp2=x| 0-28| Temperature Target for Heater Zone 2|
 | serial=x| on/off| Enables output of Modbus messages to Serial<br>Works with ModBusLogger tool on Serial message mode.|
+| logging=x | 1.2.3.4 / off | Enable UDP stream of modbus messages for logging, supported with ModBusLogger tool.|
+
 
 Additional endpoints are:
 | URI Path   | Function       |
