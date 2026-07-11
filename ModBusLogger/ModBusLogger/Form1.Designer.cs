@@ -52,6 +52,7 @@
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.rbtStringMode = new System.Windows.Forms.RadioButton();
             this.rbtByteMode = new System.Windows.Forms.RadioButton();
+            this.chkNetwork = new System.Windows.Forms.CheckBox();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -280,11 +281,23 @@
             this.rbtByteMode.Text = "Data sent as raw byte";
             this.rbtByteMode.UseVisualStyleBackColor = true;
             // 
+            // chkNetwork
+            // 
+            this.chkNetwork.AutoSize = true;
+            this.chkNetwork.Location = new System.Drawing.Point(288, 65);
+            this.chkNetwork.Name = "chkNetwork";
+            this.chkNetwork.Size = new System.Drawing.Size(96, 17);
+            this.chkNetwork.TabIndex = 21;
+            this.chkNetwork.Text = "Network Mode";
+            this.chkNetwork.UseVisualStyleBackColor = true;
+            this.chkNetwork.CheckedChanged += new System.EventHandler(this.chkNetwork_CheckedChanged);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1064, 723);
+            this.Controls.Add(this.chkNetwork);
             this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.label5);
             this.Controls.Add(this.txtCOMB);
@@ -340,6 +353,7 @@
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.RadioButton rbtStringMode;
         private System.Windows.Forms.RadioButton rbtByteMode;
+        private System.Windows.Forms.CheckBox chkNetwork;
     }
 }
 

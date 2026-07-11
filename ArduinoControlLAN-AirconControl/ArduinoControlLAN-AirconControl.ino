@@ -7,6 +7,7 @@
 #include <esp_timer.h>
 #include <HardwareSerial.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 
 
 #include "NetworkSettings.h"
@@ -36,6 +37,22 @@ int SerialBIndex = 0;
 bool SerialOutputModbus = false;
 
 bool MonitorMode = false;
+
+// UDP Logging - mirrors SerialPrintMessage output to a remote host.
+// Messages are queued here and sent from UdpLogTask so the modbus relay loop is never blocked by the network stack.
+#define UDPLOGPORT 20000
+#define UDPLOGQUEUELEN 8
+
+struct UdpLogEntry {
+  uint8_t data[MAXMSGSIZE + 2];  // +2 allows for CRC appended by SendMessage.
+  int length;
+  int serialID;
+};
+
+bool UdpLoggingEnabled = false;
+IPAddress UdpLogHost;
+WiFiUDP UdpLogger;
+QueueHandle_t udpLogQueue;
 
 // Aircon Control Variables.
 bool SystemPower = false;
@@ -191,6 +208,9 @@ void setup() {
 
   msgSemaphore = xSemaphoreCreateMutex();
 
+  udpLogQueue = xQueueCreate(UDPLOGQUEUELEN, sizeof(UdpLogEntry));
+  xTaskCreate(UdpLogTask, "UdpLogTask", 4096, NULL, 1, NULL);
+
   // Prefill messages used for webserver.
   memset(eb1008e600_request, 0, eb1008e600_size);
 
@@ -331,7 +351,7 @@ void NetworkInfoResponse() {
   hvacJson["WIFI_IP"] = WiFi.localIP().toString();
   hvacJson["WIFI_dBm"] = signal_val;
   hvacJson["WIFI_MAC"] = WiFi.macAddress();
-  
+
   unlockVariable();
 
   serializeJsonPretty(hvacJson, jsonstring);
@@ -387,6 +407,19 @@ void webCommandResponse() {
     } else if (body.indexOf("monitor=off") != -1) {
       MonitorMode = false;
       Serial.println("Monitor Mode Off");
+    } else if (body.startsWith("logging=")) {
+      String host = body.substring(8);
+      host.trim();
+      if (host == "off") {
+        UdpLoggingEnabled = false;
+        Serial.println("UDP Logging Disabled");
+      } else if (UdpLogHost.fromString(host)) {
+        UdpLoggingEnabled = true;
+        Serial.println("UDP Logging Enabled to " + UdpLogHost.toString() + ":" + String(UDPLOGPORT));
+      } else {
+        UdpLoggingEnabled = false;
+        Serial.println("UDP Logging host invalid: " + host);
+      }
     } else if (body.startsWith("send=")) {
       SendMessageString(body.substring(5));
     } else if (body.startsWith("fanspeed=")) {
@@ -442,7 +475,7 @@ bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
   uint16_t crcraw = (msgBuffer[msgLength - 2] << 8 | msgBuffer[msgLength - 1]);
   uint16_t expectedcrc = modbusCRC(msgBuffer, msgLength - 2);
   if (crcraw == expectedcrc) {
-    if (SerialOutputModbus) {
+    if (SerialOutputModbus || UdpLoggingEnabled) {
       SerialPrintMessage(msgBuffer, msgLength, SerialID);
     }
 
@@ -491,17 +524,49 @@ void Panel2Info(uint8_t *msgBuffer, int msgLength) {
 }
 
 void SerialPrintMessage(uint8_t *msgBuffer, int msgLength, int SerialID) {
-  Serial.print("S");
-  Serial.print(SerialID);
-  Serial.print(" ");
-  for (int i = 0; i < (msgLength - 2); i++) {
-    Serial.print(msgBuffer[i], HEX);
+  if (SerialOutputModbus) {
+    Serial.print("S");
+    Serial.print(SerialID);
     Serial.print(" ");
+    for (int i = 0; i < (msgLength - 2); i++) {
+      Serial.print(msgBuffer[i], HEX);
+      Serial.print(" ");
+    }
+    Serial.print(msgBuffer[msgLength - 2], HEX);
+    Serial.print(" ");
+    Serial.print(msgBuffer[msgLength - 1], HEX);
+    Serial.println();
   }
-  Serial.print(msgBuffer[msgLength - 2], HEX);
-  Serial.print(" ");
-  Serial.print(msgBuffer[msgLength - 1], HEX);
-  Serial.println();
+
+  // Queue a copy for UDP logging, sent by UdpLogTask.
+  // Never blocks; drops the message if the queue is full.
+  if (UdpLoggingEnabled && msgLength <= (int)sizeof(((UdpLogEntry *)0)->data)) {
+    UdpLogEntry entry;
+    memcpy(entry.data, msgBuffer, msgLength);
+    entry.length = msgLength;
+    entry.serialID = SerialID;
+    xQueueSend(udpLogQueue, &entry, 0);
+  }
+}
+
+void UdpLogTask(void *parameter) {
+  UdpLogEntry entry;
+  static char line[(MAXMSGSIZE + 2) * 3 + 8];  // "S1" + " FF" per byte + newline.
+  while (true) {
+    if (xQueueReceive(udpLogQueue, &entry, portMAX_DELAY) == pdTRUE) {
+      if (!UdpLoggingEnabled) {
+        continue;
+      }
+      int pos = snprintf(line, sizeof(line), "S%d", entry.serialID);
+      for (int i = 0; i < entry.length; i++) {
+        pos += snprintf(line + pos, sizeof(line) - pos, " %X", entry.data[i]);
+      }
+      line[pos++] = '\n';
+      UdpLogger.beginPacket(UdpLogHost, UDPLOGPORT);
+      UdpLogger.write((uint8_t *)line, pos);
+      UdpLogger.endPacket();
+    }
+  }
 }
 
 static uint16_t modbusCRC(uint8_t *buffer, uint16_t buffer_length) {
@@ -709,35 +774,6 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
       TargetTemp = TargetTempInfo;
       TargetTemp2 = TargetTemp2Info;
 
-      // System Mode.
-      uint8_t evapmodetemp = EvapModeInfo & 0x0F;  // mask higher bits.
-      if (evapmodetemp == 0x01) {
-        // Cooler Mode - Off
-        SystemMode = 2;
-      } else if (evapmodetemp == 0x05) {
-        // Cooler Mode - Manual
-        SystemMode = 2;
-      } else if (evapmodetemp == 0x07) {
-        // Cooler Mode - Auto
-        SystemMode = 3;
-      } else if (evapmodetemp == 0x09) {
-        // Fan - External
-        SystemMode = 0;
-      } else if (HeaterModeInfo == 0x01) {
-        // Heater
-        SystemMode = 4;
-      } else if (HeaterModeInfo == 0x03) {
-        // Fan - Recycle
-        SystemMode = 1;
-      }
-
-      // Only update FanSpeed when using Fan Modes or Cooler Manual Mode.
-      if (HeaterFanSpeedInfo > 0 && SystemMode == 1) {
-        FanSpeed = HeaterFanSpeedInfo;
-      } else if (SystemMode == 0 || SystemMode == 2) {
-        FanSpeed = EvapFanSpeedInfo;
-      }
-
       // Update local variables for command message and disable send trigger.
       UpdateCommandMessage();
 
@@ -768,6 +804,35 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     Zone2EnabledInfo = (msgBuffer[80] >> 1) & 1;  // Zone 2 Enabled (2nd LSB)
     // Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
+
+    // System Mode.
+    uint8_t evapmodetemp = EvapModeInfo & 0x0F;  // mask higher bits.
+    if (evapmodetemp == 0x01) {
+      // Cooler Mode - Off
+      SystemMode = 2;
+    } else if (evapmodetemp == 0x05) {
+      // Cooler Mode - Manual
+      SystemMode = 2;
+    } else if (evapmodetemp == 0x07) {
+      // Cooler Mode - Auto
+      SystemMode = 3;
+    } else if (evapmodetemp == 0x09) {
+      // Fan - External
+      SystemMode = 0;
+    } else if (HeaterModeInfo == 0x01) {
+      // Heater
+      SystemMode = 4;
+    } else if (HeaterModeInfo == 0x03) {
+      // Fan - Recycle
+      SystemMode = 1;
+    }
+
+    // Only update FanSpeed when using Fan Modes or Cooler Manual Mode.
+    if (HeaterFanSpeedInfo > 0 && SystemMode == 1) {
+      FanSpeed = HeaterFanSpeedInfo;
+    } else if (SystemMode == 0 || SystemMode == 2) {
+      FanSpeed = EvapFanSpeedInfo;
+    }
 
     unlockVariable();
     // Zone2 captured from CP2 reports.
@@ -836,7 +901,7 @@ void SendMessage(uint8_t *msgBuffer, int length, bool sendcrc) {
     SerialB.write(lowByte);
   }
 
-  if (SerialOutputModbus) {
+  if (SerialOutputModbus || UdpLoggingEnabled) {
     if (sendcrc) {
       // Create temporary buffer with CRC included
       uint8_t tempBuffer[MAXMSGSIZE + 2];

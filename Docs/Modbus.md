@@ -1,7 +1,7 @@
 [Back to Readme](../README.md)
 
 ## MODBUS:
-The [Modbus Codes.xlsx](../Modbus%20Codes.xlsx) file contains information about the modbus messages used on the network.
+The [Modbus Codes.ods](../Modbus%20Codes.ods) file contains information about the modbus messages used on the network.
 Messages are sent in pairs with a request and response message.
 The document formats these by the Slave ID, Function Code, Request, Response with notes about the information found in these message pairs.
 

@@ -12,7 +12,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Globalization;
+using System.Net;
 using System.Net.Configuration;
+using System.Net.Sockets;
 
 namespace ModBusLogger
 {
@@ -20,8 +22,13 @@ namespace ModBusLogger
     {
         Thread SerialThread;
         Thread SerialThread2;
+        Thread UdpThread;
         SerialPort serialAPort = new SerialPort();
         SerialPort serialBPort = new SerialPort();
+
+        const int UdpListenPort = 20000;
+
+        static bool network_mode = false;
 
 
         static string OModeString;
@@ -360,6 +367,86 @@ namespace ModBusLogger
             }
         }
 
+        static void UdpMonitoringThread()
+        {
+            UniMessages.Clear();
+
+            //start new log file.
+            StreamWriter SW = new StreamWriter("modbus_log_udp.csv");
+            StreamWriter SWError = new StreamWriter("modbus_crc_failures_udp.csv");
+
+            UdpClient udpClient;
+            try
+            {
+                udpClient = new UdpClient(UdpListenPort);
+                udpClient.Client.ReceiveTimeout = 1000; //Allow loop to check stop flags.
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error starting UDP listener on port " + UdpListenPort + ": " + ex.Message);
+                SW.Close();
+                SWError.Close();
+                return;
+            }
+
+            IPEndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
+
+            while (stop_monitor == false && shutdown == false)
+            {
+                byte[] datagram;
+                try
+                {
+                    datagram = udpClient.Receive(ref remoteEP);
+                }
+                catch (SocketException)
+                {
+                    continue; //Receive timeout - normal while no packets arriving.
+                }
+
+                //Each datagram holds one message line e.g. "S1 8D 10 0 6E 0 1 7F 18\n".
+                foreach (string line in Encoding.ASCII.GetString(datagram).Split('\n'))
+                {
+                    string linedata = line.Trim();
+                    if (String.IsNullOrEmpty(linedata)) continue;
+
+                    ModBusMessage curMsg = new ModBusMessage();
+                    curMsg.Timestamp = DateTime.Now;
+                    SW.WriteLine(DateTime.Now.ToString("HH:mm:ss.ffff") + " " + linedata); //Write to logfile.
+                    string[] linedatasplit = linedata.Split(' ');
+                    try
+                    {
+                        curMsg.serialport = linedatasplit[0]; //serial port on source device.
+                        curMsg.SlaveID = Convert.ToInt32(linedatasplit[1], 16);
+                        curMsg.FunctionCode = Convert.ToInt32(linedatasplit[2], 16);
+                        for (int i = 3; i < linedatasplit.Length; i++)
+                        {
+                            curMsg.Data.Add(Convert.ToInt32(linedatasplit[i], 16));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        SWError.WriteLine(linedata); //data that does not parse correctly.
+                        continue;
+                    }
+
+                    UniMessageCheck(curMsg);
+                    MessageDisplayQueue.Enqueue(curMsg);
+                }
+            }
+            udpClient.Close();
+            SW.Close();
+            SWError.Close();
+
+            //Write all unique modbus messages (exclude messages duplicate SlaveID, Function Code and Messsage)
+            StreamWriter SW2 = new StreamWriter("modbus_unique_udp.csv");
+            SW2.WriteLine("RepeatCount,SlaveID,FunctionCode,Data");
+            foreach (ModBusMessage umodmsg in UniMessages)
+            {
+                SW2.WriteLine(umodmsg.DetectionCount + "," + umodmsg.SlaveID.ToString("X2") + "," + umodmsg.FunctionCode.ToString("X2") + "," + umodmsg.GetDataString(true));
+            }
+            SW2.Close();
+        }
+
         static void SerialWriteQueueProcess(ref SerialPort serialPort, ref Queue<int> SerialWriteQueue)
         {
             while (stop_monitor == false && shutdown == false)
@@ -376,17 +463,25 @@ namespace ModBusLogger
         {
             stop_monitor = false;
 
-            serialAPort.PortName = txtCOMA.Text;
-            SerialThread = new Thread(() => MonitoringThread(serialAPort, serialBPort, rbtByteMode.Checked));
-            SerialThread.Start();
-
-            if (rbtByteMode.Checked && !string.IsNullOrEmpty(txtCOMB.Text))
+            if (network_mode)
             {
-                serialBPort.PortName = txtCOMB.Text;
-                SerialThread2 = new Thread(() => MonitoringThread(serialBPort, serialAPort, true));
-                SerialThread2.Start();
+                //Network mode - source device sends messages over UDP instead of the serial ports.
+                UdpThread = new Thread(UdpMonitoringThread);
+                UdpThread.Start();
             }
+            else
+            {
+                serialAPort.PortName = txtCOMA.Text;
+                SerialThread = new Thread(() => MonitoringThread(serialAPort, serialBPort, rbtByteMode.Checked));
+                SerialThread.Start();
 
+                if (rbtByteMode.Checked && !string.IsNullOrEmpty(txtCOMB.Text))
+                {
+                    serialBPort.PortName = txtCOMB.Text;
+                    SerialThread2 = new Thread(() => MonitoringThread(serialBPort, serialAPort, true));
+                    SerialThread2.Start();
+                }
+            }
 
             btnStart.Enabled = false;
             btnStop.Enabled = true;
@@ -669,6 +764,11 @@ namespace ModBusLogger
         private void txtCOMA_TextChanged(object sender, EventArgs e)
         {
 
+        }
+
+        private void chkNetwork_CheckedChanged(object sender, EventArgs e)
+        {
+            network_mode = chkNetwork.Checked;
         }
     }
 
