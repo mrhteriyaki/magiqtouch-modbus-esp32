@@ -647,7 +647,7 @@ void UpdateCommandMessage() {
     SetXVal(&x8vl, 0x02);
   } else if (SystemMode == 3)  // Cooler Mode Auto (Temp) - not tested.
   {
-    uint16_t tempVal = 0x2003 + (TargetTemp * 0x20);
+    uint16_t tempVal = 0x2000 | (TargetTemp << 5) | 0x03;
     uint8_t highByte = (tempVal >> 8) & 0xFF;
     uint8_t lowByte = tempVal & 0xFF;
 
@@ -670,7 +670,7 @@ void UpdateCommandMessage() {
     // SetXVal(&x6vl, 0x42);
 
     // Heater setting
-    uint16_t tempVal = 0x02C3 + (0x40 * TargetTemp);
+    uint16_t tempVal = (TargetTemp << 6) | 0x03;
     uint8_t highByte = (tempVal >> 8) & 0xFF;
     uint8_t lowByte = tempVal & 0xFF;
     SetXVal(&x7vl, highByte);
