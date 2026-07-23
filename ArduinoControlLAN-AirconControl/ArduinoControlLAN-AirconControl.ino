@@ -80,6 +80,12 @@ uint8_t TargetTemp2Info = 0x0;
 uint8_t ThermisterTempInfo = 0x0;
 uint8_t AutomaticCleanRunning = 0x0;
 
+// Derived from panel info. Reporting only.
+bool initialSyncDone = false;  // No valid panel state known until first resync.
+bool resyncPending = true;
+uint8_t ReportedMode = 0x0;
+uint8_t ReportedFanSpeed = 0x0;
+
 bool sendCommand = false;
 uint8_t IOTModuleCommandRequest[] = { 0xEB, 0x03, 0x0B, 0x0C, 0x00, 0x0D, 0x50, 0xE2 };
 uint8_t x2vl = 0x9F;  // Increases for each command sent.
@@ -299,7 +305,7 @@ void webRootResponse() {
   hvacJson["module_name"] = LanController::NET_HOSTNAME;
   hvacJson["uptime"] = getUptimeFormatted();
   hvacJson["system_power"] = SystemPowerInfo;
-  hvacJson["system_mode"] = SystemMode;
+  hvacJson["system_mode"] = ReportedMode;
   hvacJson["target_temp"] = TargetTempInfo;
   hvacJson["target_temp_zone2"] = TargetTemp2Info;
   hvacJson["evap_mode"] = EvapModeInfo;
@@ -607,20 +613,19 @@ void SendIOTModuleStatus() {
 void UpdateCommandMessage() {
   if (x4vl == 0x11 && SystemPower == true) {
     x4vl = 0x10;
-    sendCommand = true;
     if (SerialOutputModbus) {
       Serial.println("System Power turned on.");
     }
   } else if (x4vl == 0x10 && SystemPower == false) {
     x4vl = 0x11;
-    sendCommand = true;
     if (SerialOutputModbus) {
       Serial.println("System Power turned off.");
     }
   }
 
-  uint8_t tmpCfanspeed = 0x41 + (FanSpeed * 2);
-  uint8_t tmpHfanspeed = 0x21 + (FanSpeed * 2);
+  uint8_t safeFanSpeed = (FanSpeed < 1) ? 1 : FanSpeed;
+  uint8_t tmpCfanspeed = 0x41 + (safeFanSpeed * 2);
+  uint8_t tmpHfanspeed = 0x21 + (safeFanSpeed * 2);
 
   if (SystemMode == 0)  // External Fan Mode.
   {
@@ -696,7 +701,7 @@ void SendCommandMessage() {
   UpdateCommandMessage();
   unlockVariable();
 
-  if (sendCommand) {
+  if (sendCommand && initialSyncDone) {
     if (SerialOutputModbus) {
       Serial.println("Command Triggered from IOT Request");
     }
@@ -728,7 +733,6 @@ void SendCommandMessage() {
 void SetXVal(uint8_t *val, uint8_t newVal) {
   if (*val != newVal) {
     *val = newVal;
-    sendCommand = true;
   }
 }
 
@@ -774,10 +778,8 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
       TargetTemp = TargetTempInfo;
       TargetTemp2 = TargetTemp2Info;
 
-      // Update local variables for command message and disable send trigger.
-      UpdateCommandMessage();
-
-      sendCommand = false;
+      // Defer mode/fan latch until a fresh E6 info frame has been decoded.
+      resyncPending = true;
 
       unlockVariable();
     }
@@ -805,33 +807,41 @@ void IoTModuleMessageProcess(uint8_t msgBuffer[], int msgLength) {
     // Zone2EnabledInfo = msgBuffer[82];  //Zone 2 Enabled
     Zone1TempInfo = msgBuffer[87];
 
-    // System Mode.
-    uint8_t evapmodetemp = EvapModeInfo & 0x0F;  // mask higher bits.
-    if (evapmodetemp == 0x01) {
-      // Cooler Mode - Off
-      SystemMode = 2;
-    } else if (evapmodetemp == 0x05) {
-      // Cooler Mode - Manual
-      SystemMode = 2;
-    } else if (evapmodetemp == 0x07) {
-      // Cooler Mode - Auto
-      SystemMode = 3;
-    } else if (evapmodetemp == 0x09) {
-      // Fan - External
-      SystemMode = 0;
+    // Derived state for reporting only. Must not touch command variables.
+    uint8_t evapmodereport = EvapModeInfo & 0x0F;  // mask higher bits.
+    if (evapmodereport == 0x01) {
+      ReportedMode = 2;  // Cooler - standby/off
+    } else if (evapmodereport == 0x05) {
+      ReportedMode = 2;  // Cooler - manual
+    } else if (evapmodereport == 0x07) {
+      ReportedMode = 3;  // Cooler - auto
+    } else if (evapmodereport == 0x09) {
+      ReportedMode = 0;  // Fan - external
     } else if (HeaterModeInfo == 0x01) {
-      // Heater
-      SystemMode = 4;
+      ReportedMode = 4;  // Heater
     } else if (HeaterModeInfo == 0x03) {
-      // Fan - Recycle
-      SystemMode = 1;
+      ReportedMode = 1;  // Fan - recycle
     }
 
-    // Only update FanSpeed when using Fan Modes or Cooler Manual Mode.
-    if (HeaterFanSpeedInfo > 0 && SystemMode == 1) {
-      FanSpeed = HeaterFanSpeedInfo;
-    } else if (SystemMode == 0 || SystemMode == 2) {
-      FanSpeed = EvapFanSpeedInfo;
+    if (HeaterFanSpeedInfo > 0 && (ReportedMode == 1 || ReportedMode == 4)) {
+      ReportedFanSpeed = HeaterFanSpeedInfo;
+    } else {
+      ReportedFanSpeed = EvapFanSpeedInfo;
+    }
+
+    // Deferred re-sync: adopt panel state as command state, using bytes
+    // decoded from this frame. Held off while an app command is in flight.
+    if (resyncPending && (!sendCommand || !initialSyncDone)) {
+      SystemMode = ReportedMode;
+      if (ReportedFanSpeed > 0) {
+        FanSpeed = ReportedFanSpeed;
+      }
+      UpdateCommandMessage();  // realign command bytes silently
+      resyncPending = false;
+      initialSyncDone = true;
+      if (SerialOutputModbus) {
+        Serial.println("Command state re-synced from panel info.");
+      }
     }
 
     unlockVariable();
